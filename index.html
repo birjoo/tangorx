@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReconSec — Security Made Simple</title>
+<meta name="description" content="ReconSec helps small businesses stay secure without the jargon. Simple, honest cybersecurity for real-world teams.">
+<style>
+  :root {
+    --navy: #0F1E35;
+    --navy-light: #1B3050;
+    --navy-lighter: #24406b;
+    --gold: #E8A020;
+    --gold-light: #f4c469;
+    --off-white: #F7F5F1;
+    --text-muted: #B9C2D0;
+    --max-width: 1120px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--navy);
+    background: var(--off-white);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  img, svg { display: block; max-width: 100%; }
+
+  .wrap {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--navy);
+    border-bottom: 1px solid rgba(232,160,32,0.15);
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+
+  .logo-mark {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+  }
+
+  .nav-links a:hover { color: var(--gold); }
+
+  .nav-cta {
+    display: none;
+  }
+
+  @media (min-width: 720px) {
+    .nav-cta {
+      display: inline-block;
+      background: var(--gold);
+      color: var(--navy);
+      font-weight: 700;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+    .nav-cta:hover { background: var(--gold-light); transform: translateY(-1px); }
+  }
+
+  @media (max-width: 719px) {
+    .nav-links { display: none; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    background: linear-gradient(160deg, var(--navy) 0%, var(--navy-light) 60%, var(--navy-lighter) 100%);
+    color: #fff;
+    padding: 96px 24px 110px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: -120px;
+    top: -120px;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,160,32,0.18) 0%, rgba(232,160,32,0) 70%);
+  }
+
+  .hero-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+
+  .eyebrow {
+    display: inline-block;
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    border: 1px solid rgba(232,160,32,0.4);
+    padding: 6px 14px;
+    border-radius: 999px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1.15;
+    max-width: 780px;
+    margin: 0 auto 20px;
+    letter-spacing: -0.01em;
+  }
+
+  .hero h1 span { color: var(--gold); }
+
+  .hero p {
+    font-size: 1.15rem;
+    color: var(--text-muted);
+    max-width: 620px;
+    margin: 0 auto 40px;
+  }
+
+  .btn {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 1.02rem;
+    padding: 16px 36px;
+    border-radius: 8px;
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .btn-primary {
+    background: var(--gold);
+    color: var(--navy);
+    box-shadow: 0 10px 30px rgba(232,160,32,0.25);
+  }
+
+  .btn-primary:hover {
+    background: var(--gold-light);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 34px rgba(232,160,32,0.35);
+  }
+
+  .hero-note {
+    margin-top: 18px;
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.55);
+  }
+
+  /* ---------- Section shared ---------- */
+  section {
+    padding: 88px 24px;
+  }
+
+  .section-head {
+    text-align: center;
+    max-width: 640px;
+    margin: 0 auto 56px;
+  }
+
+  .section-tag {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .section-head h2 {
+    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 14px;
+    letter-spacing: -0.01em;
+  }
+
+  .section-head p {
+    color: #4a5568;
+    font-size: 1.05rem;
+  }
+
+  /* ---------- What We Do ---------- */
+  .services {
+    background: #fff;
+  }
+
+  .service-grid {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 28px;
+  }
+
+  .service-card {
+    background: var(--off-white);
+    border: 1px solid #e7e2d8;
+    border-radius: 12px;
+    padding: 32px 28px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+
+  .service-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px rgba(15,30,53,0.08);
+    border-color: rgba(232,160,32,0.4);
+  }
+
+  .service-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background: var(--navy);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .service-icon svg { width: 24px; height: 24px; }
+
+  .service-card h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--navy);
+  }
+
+  .service-card p {
+    color: #556070;
+    font-size: 0.96rem;
+  }
+
+  /* ---------- How It Works ---------- */
+  .how {
+    background: var(--off-white);
+  }
+
+  .steps {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 32px;
+    position: relative;
+  }
+
+  .step {
+    background: #fff;
+    border-radius: 14px;
+    padding: 36px 28px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(15,30,53,0.05);
+    position: relative;
+  }
+
+  .step-number {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: var(--gold);
+    font-weight: 800;
+    font-size: 1.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    border: 2px solid var(--gold);
+  }
+
+  .step h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--navy);
+  }
+
+  .step p {
+    color: #556070;
+    font-size: 0.95rem;
+  }
+
+  /* ---------- About ---------- */
+  .about {
+    background: var(--navy);
+    color: #fff;
+  }
+
+  .about-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .about .section-head p { color: var(--text-muted); }
+
+  .about-body {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    margin-bottom: 32px;
+  }
+
+  .about-stats {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    padding-top: 36px;
+  }
+
+  .about-stat strong {
+    display: block;
+    font-size: 1.9rem;
+    color: var(--gold);
+    font-weight: 800;
+  }
+
+  .about-stat span {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+
+  /* ---------- Contact ---------- */
+  .contact {
+    background: #fff;
+  }
+
+  .contact-box {
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--off-white);
+    border: 1px solid #e7e2d8;
+    border-radius: 16px;
+    padding: 48px 40px;
+    text-align: center;
+  }
+
+  .contact-box h2 {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 12px;
+  }
+
+  .contact-box p {
+    color: #556070;
+    margin-bottom: 32px;
+    font-size: 1.02rem;
+  }
+
+  .contact-links {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .contact-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #e2ddd0;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--navy);
+  }
+
+  .contact-item svg { width: 18px; height: 18px; color: var(--gold); flex-shrink: 0; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    background: var(--navy);
+    color: var(--text-muted);
+    text-align: center;
+    padding: 32px 24px;
+    font-size: 0.88rem;
+  }
+
+  footer strong { color: #fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="nav">
+    <a href="#top" class="logo">
+      <svg class="logo-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M20 2L35 8V19C35 28.5 28.8 35.8 20 38C11.2 35.8 5 28.5 5 19V8L20 2Z" fill="#E8A020"/>
+        <path d="M20 6L31 10.3V19C31 26.3 26.3 32 20 33.8C13.7 32 9 26.3 9 19V10.3L20 6Z" fill="#0F1E35"/>
+        <path d="M15 19.5L18.3 22.8L25 15.5" stroke="#E8A020" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      ReconSec
+    </a>
+    <ul class="nav-links">
+      <li><a href="#what-we-do">What We Do</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#about">About</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <a href="#contact" class="nav-cta">Get Started</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-inner">
+      <span class="eyebrow">Cybersecurity for small businesses</span>
+      <h1>Security Made <span>Simple</span></h1>
+      <p>You run a business, not an IT department. ReconSec protects you from cyber threats with plain-English guidance and no confusing jargon — just clear steps that keep you safe.</p>
+      <a href="#contact" class="btn btn-primary">Get Your Free Security Check</a>
+      <p class="hero-note">No pressure, no tech-speak — just an honest look at where you stand.</p>
+    </div>
+  </section>
+
+  <!-- What We Do -->
+  <section class="services" id="what-we-do">
+    <div class="section-head">
+      <div class="section-tag">What We Do</div>
+      <h2>Protection that actually makes sense</h2>
+      <p>We translate cybersecurity into plain language and handle the technical work so you don't have to.</p>
+    </div>
+    <div class="service-grid">
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L20 5.5V11C20 16 16.6 20.4 12 21.5C7.4 20.4 4 16 4 11V5.5L12 2Z" stroke="#E8A020" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 11.5L11.2 13.7L15.5 9" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Security Checkups</h3>
+        <p>We look at your systems and tell you, in plain terms, what's safe and what needs attention — no scare tactics.</p>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="10" width="16" height="10" rx="2" stroke="#E8A020" stroke-width="1.8"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="#E8A020" stroke-width="1.8"/></svg>
+        </div>
+        <h3>Data Protection</h3>
+        <p>We help you lock down customer data, files, and accounts so a bad day never becomes a business-ending one.</p>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12h4l2-6 4 12 2-6h4" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Threat Monitoring</h3>
+        <p>We keep an eye out for suspicious activity around the clock and let you know immediately if something's wrong.</p>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="3.5" stroke="#E8A020" stroke-width="1.8"/><path d="M4.5 20c1.5-4 4-5.5 7.5-5.5s6 1.5 7.5 5.5" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Team Training</h3>
+        <p>We teach your team to spot scams and phishing emails with simple, five-minute lessons — no manuals required.</p>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v6M12 3l-3 3M12 3l3 3" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Incident Response</h3>
+        <p>If something does go wrong, we're on call to help you recover fast and get back to business.</p>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 5h14v10H5z" stroke="#E8A020" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 19h6M12 15v4" stroke="#E8A020" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Ongoing Support</h3>
+        <p>Questions come up — we answer them. Think of us as the security team you can actually talk to.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how" id="how-it-works">
+    <div class="section-head">
+      <div class="section-tag">How It Works</div>
+      <h2>Three simple steps to peace of mind</h2>
+      <p>No long contracts, no confusing setup. Just a clear path to a safer business.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <h3>We Take a Look</h3>
+        <p>We review your current setup and find any gaps — quickly, and without disrupting your day.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <h3>We Explain It Simply</h3>
+        <p>You get a plain-English report showing what matters, what doesn't, and what to fix first.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3>We Keep You Safe</h3>
+        <p>We put protections in place and monitor things going forward, so security stays off your plate.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section class="about" id="about">
+    <div class="about-inner">
+      <div class="section-head">
+        <div class="section-tag">About Us</div>
+        <h2>Security shouldn't require a computer science degree</h2>
+      </div>
+      <p class="about-body">ReconSec was founded on a simple idea: small businesses deserve the same level of protection as big corporations, without the complexity or the price tag. We're a team of security professionals who believe our job is to make things clearer, not more complicated. No jargon, no upsells, no fear-mongering — just honest advice and dependable protection from people who genuinely want to help.</p>
+      <div class="about-stats">
+        <div class="about-stat">
+          <strong>100+</strong>
+          <span>Small businesses protected</span>
+        </div>
+        <div class="about-stat">
+          <strong>24/7</strong>
+          <span>Threat monitoring</span>
+        </div>
+        <div class="about-stat">
+          <strong>0</strong>
+          <span>Jargon, ever</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section class="contact" id="contact">
+    <div class="section-head">
+      <div class="section-tag">Contact</div>
+      <h2>Let's make your business more secure</h2>
+      <p>Reach out for a free, no-obligation security check. We'll explain everything in plain language.</p>
+    </div>
+    <div class="contact-box">
+      <h2>Ready when you are</h2>
+      <p>Tell us a bit about your business and we'll get back to you within one business day.</p>
+      <div class="contact-links">
+        <a class="contact-item" href="mailto:hello@reconsec.io">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M3 7l9 6 9-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          hello@reconsec.io
+        </a>
+        <a class="contact-item" href="tel:+18005551234">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2C9.6 21 3 14.4 3 6a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          (800) 555-1234
+        </a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <strong>ReconSec</strong> — Security Made Simple &nbsp;•&nbsp; &copy; 2026 ReconSec. All rights reserved.
+</footer>
+
+</body>
+</html>

@@ -201,6 +201,84 @@
     color: rgba(255,255,255,0.55);
   }
 
+  .hero-urgency {
+    max-width: 640px;
+    margin: 0 auto 32px;
+    padding: 12px 20px;
+    background: rgba(225,82,82,0.12);
+    border: 1px solid rgba(225,82,82,0.4);
+    border-radius: 8px;
+    color: #ffd9d9;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  /* ---------- Risks ---------- */
+  .risks {
+    background: var(--navy);
+    color: #fff;
+  }
+
+  .risks .section-head h2 { color: #fff; }
+  .risks .section-head p { color: var(--text-muted); }
+
+  .risk-grid {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+  }
+
+  .risk-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(225,82,82,0.25);
+    border-left: 3px solid #E15252;
+    border-radius: 12px;
+    padding: 28px 26px;
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .risk-card:hover {
+    transform: translateY(-4px);
+    background: rgba(255,255,255,0.07);
+  }
+
+  .risk-icon {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 16px;
+  }
+
+  .risk-icon svg { width: 28px; height: 28px; }
+
+  .risk-card h3 {
+    font-size: 1.08rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #fff;
+  }
+
+  .risk-card p {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+  }
+
+  .risk-cta {
+    text-align: center;
+    margin-top: 44px;
+    font-size: 1.05rem;
+    color: var(--text-muted);
+  }
+
+  .risk-cta a {
+    color: var(--gold);
+    font-weight: 700;
+    border-bottom: 2px solid var(--gold);
+  }
+
+  .risk-cta a:hover { color: var(--gold-light); }
+
   /* ---------- Section shared ---------- */
   section {
     padding: 88px 24px;
@@ -592,13 +670,14 @@
       ReconSec
     </a>
     <ul class="nav-links">
+      <li><a href="#why-it-matters">Why It Matters</a></li>
       <li><a href="#what-we-do">What We Do</a></li>
       <li><a href="#how-it-works">How It Works</a></li>
       <li><a href="#packages">Packages</a></li>
       <li><a href="#about">About</a></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
-    <a href="#contact" class="nav-cta">Get Started</a>
+    <a href="#contact" class="nav-cta">Check My Site</a>
   </nav>
 </header>
 
@@ -610,9 +689,71 @@
       <span class="eyebrow">Automated security scanning for small businesses</span>
       <h1>Security Made <span>Simple</span></h1>
       <p>We scan your website with the same tools hackers use — then translate what we find into plain English, with a clear list of what to fix first. No jargon, no in-house security expert required.</p>
-      <a href="#contact" class="btn btn-primary">Get Your Free Security Scan</a>
+      <p class="hero-urgency">⚠ New vulnerabilities are disclosed every single day. Automated bots are scanning sites like yours right now — the only question is whether you find the gap first, or they do.</p>
+      <a href="#contact" class="btn btn-primary">Check My Site Now — It's Free</a>
       <p class="hero-note">A real scan, a real report — usually back in your inbox within days.</p>
     </div>
+  </section>
+
+  <!-- Risk / Why It Matters -->
+  <section class="risks" id="why-it-matters">
+    <div class="section-head">
+      <div class="section-tag">Why It Matters</div>
+      <h2>What happens if you don't check?</h2>
+      <p>Most small businesses don't get breached because someone targets them specifically — they get breached because they're easy, unmonitored, and assumed to be fine. Here's what's actually at stake while your site goes unchecked.</p>
+    </div>
+    <div class="risk-grid">
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 21h20L12 2z" stroke="#E15252" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5" stroke="#E15252" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="#E15252"/></svg>
+        </div>
+        <h3>Attackers Don't Wait</h3>
+        <p>Automated bots scan the entire internet around the clock. An exposed site is typically found in hours — not months — with zero human even choosing you as a target.</p>
+      </div>
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="#E15252" stroke-width="1.8"/><path d="M8 11V7a4 4 0 0 1 8 0v1" stroke="#E15252" stroke-width="1.8"/><path d="M9 4l10 10" stroke="#E15252" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>One Breach, Lasting Damage</h3>
+        <p>Customers rarely give a business a second chance after their data is exposed. Trust takes years to build and one incident to lose — permanently, in many cases.</p>
+      </div>
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="#E15252" stroke-width="1.8"/><path d="M12 7v5l3.5 2" stroke="#E15252" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Downtime You Can't Afford</h3>
+        <p>A compromised site often means days offline, emergency recovery costs, and lost sales while you scramble to figure out what went wrong and who to call.</p>
+      </div>
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 5h14v14H5z" stroke="#E15252" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 9h8M8 12.5h8M8 16h5" stroke="#E15252" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Deals You'll Quietly Lose</h3>
+        <p>More partners, investors, and enterprise clients now ask for proof of basic security before they'll sign. No report to show usually means no deal — and you may never be told why.</p>
+      </div>
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" stroke="#E15252" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="#E15252" stroke-width="1.8"/></svg>
+        </div>
+        <h3>Invisible Until It Isn't</h3>
+        <p>Most vulnerabilities show no warning signs at all. Your site can look completely normal right up until the moment it's compromised.</p>
+      </div>
+
+      <div class="risk-card">
+        <div class="risk-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L20 5.5V11C20 16 16.6 20.4 12 21.5C7.4 20.4 4 16 4 11V5.5L12 2Z" stroke="#E15252" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8v5" stroke="#E15252" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="#E15252"/></svg>
+        </div>
+        <h3>Notification &amp; Legal Exposure</h3>
+        <p>A data breach can trigger mandatory disclosure duties and legal costs on top of the breach itself — expenses that land squarely on you, after the fact.</p>
+      </div>
+
+    </div>
+    <p class="risk-cta">The fix starts with knowing where you stand. <a href="#contact">Get your free scan and find out →</a></p>
   </section>
 
   <!-- What We Do -->

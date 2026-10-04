@@ -25,6 +25,7 @@ NEWS_FEEDS = [
     "https://decrypt.co/feed",
 ]
 
+DEX_SEARCH_QUERIES = ["SOL", "WETH", "WBNB", "USDC", "meme", "AI", "base", "pump", "bonk", "virtual"]
 STABLECOINS = {"USDT", "USDC", "DAI", "FDUSD", "TUSD", "USDE", "PYUSD", "USDD", "FRAX", "BUSD", "USDS", "RLUSD"}
 
 _session = requests.Session()
@@ -137,7 +138,7 @@ def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_d
 
 
 # ---------------------------------------------------------------- DexScreener
-def dex_candidates(max_tokens: int = 90) -> pd.DataFrame:
+def dex_candidates(max_tokens: int = 240) -> pd.DataFrame:
     """Discovery via DexScreener boosts + latest profiles, then full pair data."""
     seen: dict[tuple[str, str], float] = {}
     for path in ("/token-boosts/top/v1", "/token-boosts/latest/v1", "/token-profiles/latest/v1"):
@@ -146,6 +147,15 @@ def dex_candidates(max_tokens: int = 90) -> pd.DataFrame:
                 key = (t.get("chainId"), t.get("tokenAddress"))
                 if all(key):
                     seen[key] = max(seen.get(key, 0.0), float(t.get("totalAmount") or t.get("amount") or 0))
+        except requests.RequestException:
+            continue
+    # Boosts/profiles skew to brand-new launches; add established liquid pairs via search
+    for q in DEX_SEARCH_QUERIES:
+        try:
+            for p in (_get(f"{DEX}/latest/dex/search?q={q}") or {}).get("pairs") or []:
+                key = (p.get("chainId"), p["baseToken"]["address"])
+                if (p.get("liquidity") or {}).get("usd", 0) >= 100_000 and key not in seen:
+                    seen[key] = 0.0
         except requests.RequestException:
             continue
     by_chain: dict[str, list[str]] = {}
@@ -201,15 +211,17 @@ def flatten_dex_pair(p: dict, boost: float = 0.0) -> dict:
 def stablecoin_pegs() -> pd.DataFrame:
     """Most liquid DEX price for major stablecoins -> depeg monitor."""
     rows = []
-    for sym in ("USDC", "USDT", "DAI", "USDe", "FDUSD", "PYUSD"):
+    for sym in ("USDC", "USDT", "DAI", "USDe", "USDS", "PYUSD"):
         try:
             pairs = (_get(f"{DEX}/latest/dex/search?q={sym}%20USD") or {}).get("pairs") or []
         except requests.RequestException:
             continue
-        pairs = [p for p in pairs if p["baseToken"]["symbol"].upper() == sym.upper()
-                 and (p.get("liquidity") or {}).get("usd", 0) > 1_000_000]
+        pairs = sorted((p for p in pairs if p["baseToken"]["symbol"].upper() == sym.upper()
+                        and (p.get("liquidity") or {}).get("usd", 0) > 1_000_000),
+                       key=lambda x: -x["liquidity"]["usd"])[:5]
         if pairs:
-            p = max(pairs, key=lambda x: x["liquidity"]["usd"])
+            # median of the 5 deepest pools: one scam token sharing the ticker can't fake a depeg
+            p = sorted(pairs, key=lambda x: float(x.get("priceUsd") or 0))[len(pairs) // 2]
             px = float(p.get("priceUsd") or 1)
             rows.append({"stable": sym, "price": px, "deviation_bps": (px - 1) * 1e4, "url": p.get("url")})
     return pd.DataFrame(rows)

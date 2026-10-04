@@ -1,0 +1,3 @@
+date,bucket,symbol,side,entry,stop,target,notional_usd,risk_usd
+2026-10-04,1. CORE SPOT,BNB,LONG,793.7,748.4014285714286,861.6478571428572,1752.15,100.0
+2026-10-04,2. FUTURES (market-neutral carry),ZRO,"LONG SPOT + SHORT PERP (1x, delta-neutral)",2.0496,nan,nan,3000.0,0.0

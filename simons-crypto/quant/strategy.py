@@ -180,7 +180,8 @@ def score_dex(cfg, dex: pd.DataFrame) -> pd.DataFrame:
     d["vol_to_liq"] = d["vol_h24"] / d["liquidity_usd"].replace(0, np.nan)
     d["vol_accel"] = (d["vol_h6"] * 4) / d["vol_h24"].replace(0, np.nan)
     ok = ((d["liquidity_usd"] >= cfg.dex_min_liquidity) & (d["vol_h24"] >= cfg.dex_min_volume)
-          & (d["age_days"] >= cfg.dex_min_age_days) & (d["fdv_to_liq"] <= cfg.dex_max_fdv_to_liq)
+          & (d["age_days"] >= cfg.dex_min_age_days)
+          & ((d["fdv_to_liq"] <= cfg.dex_max_fdv_to_liq) | (d["liquidity_usd"] >= 2_000_000))
           & (d["vol_to_liq"] <= cfg.dex_max_vol_to_liq) & (d["buy_ratio"] >= 0.5)
           & (d["chg_h24"] > -40) & (d["chg_h24"] < 300) & (d["buys_h24"] + d["sells_h24"] >= 300))
     d = d[ok].copy()
@@ -201,8 +202,8 @@ def score_dex(cfg, dex: pd.DataFrame) -> pd.DataFrame:
 
 
 def pick_speculative(cfg, dex_scored: pd.DataFrame, reg) -> Trade | None:
-    if dex_scored is None or dex_scored.empty:
-        return None
+    if dex_scored is None or len(dex_scored) < 5:
+        return None  # ranking 1-4 tokens against each other is noise, not a signal
     r = dex_scored.iloc[0]
     entry = float(r["price_usd"])
     stop, target = entry * (1 - cfg.dex_stop), entry * (1 + cfg.dex_target)

@@ -62,7 +62,7 @@ def test_three_trades_with_correct_risk():
     tv = pd.Series(dtype=float)
     core = pick_core_spot(cfg, model, universe, panel, a, reg, news, tv)
     fut = pick_futures(cfg, model, universe, panel, a, reg, news, tv, {core.symbol})
-    spec = pick_speculative(cfg, score_dex(cfg, make_dex()), reg)
+    spec = pick_speculative(cfg, score_dex(cfg, make_dex(200)), reg)
     assert core.side == "LONG" and core.stop < core.entry < core.target
     assert math.isclose(core.risk_usd, min(100 * reg["risk_multiplier"], core.risk_usd), rel_tol=1e-9)
     assert core.notional_usd <= cfg.equity * cfg.max_spot_alloc + 1e-6

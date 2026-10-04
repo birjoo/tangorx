@@ -118,7 +118,7 @@ def funding_history(coin: str, days: int) -> pd.Series:
     return df.assign(r=df["fundingRate"].astype(float)).groupby("date")["r"].mean()
 
 
-def load_panel(coins: list[str], days: int, with_funding: bool = True) -> dict[str, pd.DataFrame]:
+def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_days: int = 120) -> dict[str, pd.DataFrame]:
     """Wide panels (date x coin) for close/high/low/volume/funding."""
     closes, highs, lows, vols, funds = {}, {}, {}, {}, {}
     for i, coin in enumerate(coins):
@@ -127,7 +127,7 @@ def load_panel(coins: list[str], days: int, with_funding: bool = True) -> dict[s
             continue
         closes[coin], highs[coin], lows[coin], vols[coin] = c["close"], c["high"], c["low"], c["volume"] * c["close"]
         if with_funding:
-            funds[coin] = funding_history(coin, days)
+            funds[coin] = funding_history(coin, min(days, funding_days))
         time.sleep(0.15)
     panel = {k: pd.DataFrame(v).sort_index() for k, v in
              dict(close=closes, high=highs, low=lows, dollar_volume=vols).items()}

@@ -1,3 +1,6 @@
 __pycache__/
 .pytest_cache/
 reports/*-demo.json
+run.log
+live.md
+reports/*.json

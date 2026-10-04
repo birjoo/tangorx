@@ -34,7 +34,11 @@ The report also includes a funding-carry board, a stablecoin depeg monitor, Trad
 - **RSS** (CoinDesk, Cointelegraph, Decrypt): headline kill switch.
 - **alternative.me**: Fear & Greed regime.
 
-## Usage
+## Simplest: the web page
+
+Open `web/index.html` in any browser (double-click it). Your browser pulls live data from Hyperliquid and DexScreener and shows the 3 trades sized to your account. You don't need to install anything. Press **Refresh** each Monday.
+
+## Python usage (full report, journal, evaluation)
 
 ```bash
 cd simons-crypto

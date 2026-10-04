@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weekly Quant Picks</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#14171c;--muted:#5d6675;--line:#e3e6eb;--accent:#2f5bea;
+  --long:#0f8a4f;--short:#c23a3a;--warn:#a86400;--chip:#eef1f6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#171a20;--text:#e8eaee;
+  --muted:#9aa3b2;--line:#272c35;--accent:#7b9bff;--long:#3fcf8e;--short:#ff6b6b;--warn:#f0b44c;--chip:#20252e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:24px;margin:0}
+.sub{color:var(--muted);margin:4px 0 20px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.bar label{color:var(--muted);font-size:14px}
+input{width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+button{padding:8px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#status{color:var(--muted);font-size:14px}
+.health{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:14px}
+.health b.ok{color:var(--long)} .health b.bad{color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.slot{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sym{font-size:22px;font-weight:700;word-break:break-word}
+.side{font-weight:700;font-size:13px;padding:3px 8px;border-radius:6px;background:var(--chip);white-space:nowrap}
+.side.LONG{color:var(--long)} .side.SHORT{color:var(--short)} .side.CARRY{color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:4px 0;border-bottom:1px solid var(--line)} td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.why{margin:0;padding-left:18px;color:var(--muted);font-size:13px}
+.links a{color:var(--accent);font-size:14px;margin-right:12px}
+.conv{font-size:12px;color:var(--muted)}
+.empty{color:var(--muted);font-size:14px}
+details{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
+summary{cursor:pointer;font-weight:600}
+.small{color:var(--muted);font-size:12px;margin-top:24px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Weekly Quant Picks</h1>
+  <p class="sub">Three systematic crypto trades, Jim Simons style: data only, many small edges, strict risk.</p>
+
+  <div class="bar">
+    <label for="equity">Account size ($)</label>
+    <input id="equity" type="number" min="100" step="100" value="10000">
+    <button id="run">Refresh</button>
+    <span id="status">Loading live data…</span>
+  </div>
+
+  <div id="health" class="health" hidden></div>
+  <div id="cards" class="grid"></div>
+
+  <details id="more" hidden>
+    <summary>How the model decided</summary>
+    <div id="moreBody"></div>
+  </details>
+
+  <p class="small">Live data: Hyperliquid (prices, funding), DexScreener (DEX tokens), alternative.me (Fear &amp; Greed).
+  Hold each trade up to 7 days, place the stop immediately, then refresh next week.
+  Not financial advice. Paper-trade first.</p>
+</main>
+
+<script>
+"use strict";
+// ======================================================================= config
+const CFG = {
+  universe: 40, historyDays: 320, horizon: 7, coreUniverse: 25, minFutVol: 20e6,
+  riskCore: 0.01, riskFut: 0.01, riskSpec: 0.0025, maxSpotAlloc: 0.25, maxLev: 3,
+  stopAtr: 2, targetAtr: 3, carryMinApr: 0.25,
+  minCoins: 8, minObs: 12, tMin: 1.0,
+  dex: { minLiq: 150e3, minVol: 250e3, minAge: 7, maxFdvLiq: 60, maxVolLiq: 25, stop: 0.25, target: 0.6 },
+};
+const STABLES = new Set(["USDT","USDC","DAI","FDUSD","TUSD","USDE","PYUSD","USDD","FRAX","BUSD","USDS","RLUSD"]);
+const HL = "https://api.hyperliquid.xyz/info";
+const DEX = "https://api.dexscreener.com";
+
+// ======================================================================= fetch helpers
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function req(url, body, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, body ? { method: "POST", headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify(body) } : undefined);
+      if (r.status === 429) { await sleep(1500 * (i + 1)); continue; }
+      if (!r.ok) throw new Error(r.status + " " + url);
+      return await r.json();
+    } catch (e) { if (i === tries - 1) throw e; await sleep(800 * (i + 1)); }
+  }
+}
+async function pool(items, n, fn) {
+  const out = new Array(items.length); let k = 0;
+  await Promise.all(Array.from({ length: n }, async () => {
+    while (k < items.length) { const i = k++; try { out[i] = await fn(items[i], i); } catch { out[i] = null; } }
+  }));
+  return out;
+}
+
+// ======================================================================= math helpers
+const isNum = x => typeof x === "number" && Number.isFinite(x);
+const mean = a => { const v = a.filter(isNum); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : NaN; };
+const std = a => { const v = a.filter(isNum); if (v.length < 2) return NaN; const m = mean(v);
+  return Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / (v.length - 1)); };
+function ranks(a) { // average ranks for ties
+  const idx = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]); const r = new Array(a.length);
+  for (let i = 0; i < idx.length;) { let j = i; while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1; i = j + 1; }
+  return r;
+}
+function corr(a, b) { const ma = mean(a), mb = mean(b); let s = 0, sa = 0, sb = 0;
+  for (let i = 0; i < a.length; i++) { const x = a[i] - ma, y = b[i] - mb; s += x * y; sa += x * x; sb += y * y; }
+  return sa && sb ? s / Math.sqrt(sa * sb) : NaN; }
+function spearman(a, b) { const m = a.map((x, i) => isNum(x) && isNum(b[i]));
+  const x = a.filter((_, i) => m[i]), y = b.filter((_, i) => m[i]);
+  return x.length >= CFG.minCoins ? corr(ranks(x), ranks(y)) : NaN; }
+const mat = (T, N, f = NaN) => Array.from({ length: T }, () => new Array(N).fill(f));
+const rollMean = (arr, t, n, minP = n) => { const w = arr.slice(Math.max(0, t - n + 1), t + 1).filter(isNum);
+  return w.length >= minP ? mean(w) : NaN; };
+
+// ======================================================================= data
+async function loadUniverse() {
+  const [meta, ctxs] = await req(HL, { type: "metaAndAssetCtxs" });
+  return meta.universe.map((a, i) => {
+    const c = ctxs[i] || {}, mark = +c.markPx || 0;
+    return { coin: a.name, delisted: !!a.isDelisted, mark, funding1h: +c.funding || 0,
+             vol24: +c.dayNtlVlm || 0, oiUsd: (+c.openInterest || 0) * mark };
+  }).filter(u => !u.delisted && !STABLES.has(u.coin) && u.mark > 0);
+}
+async function loadCandles(coin) {
+  const end = Date.now(), start = end - CFG.historyDays * 864e5;
+  const raw = await req(HL, { type: "candleSnapshot", req: { coin, interval: "1d", startTime: start, endTime: end } });
+  return (raw || []).map(k => ({ t: Math.floor(k.t / 864e5), o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v }));
+}
+async function loadFunding(coin, days = 14) {
+  const raw = await req(HL, { type: "fundingHistory", coin, startTime: Date.now() - days * 864e5 });
+  const byDay = {};
+  for (const f of raw || []) { const d = Math.floor(f.time / 864e5); (byDay[d] ||= []).push(+f.fundingRate); }
+  return Object.values(byDay).map(mean);
+}
+async function loadFearGreed() {
+  try { const j = await req("https://api.alternative.me/fng/?limit=1", null, 1); return +j.data[0].value; }
+  catch { return NaN; }
+}
+function buildPanel(coins, candles) {
+  const days = [...new Set(candles.flat().filter(Boolean).map(k => k.t))].sort((a, b) => a - b);
+  const pos = new Map(days.map((d, i) => [d, i])), T = days.length, N = coins.length;
+  const P = { coins, days, close: mat(T, N), high: mat(T, N), low: mat(T, N), dvol: mat(T, N) };
+  candles.forEach((ks, j) => (ks || []).forEach(k => { const i = pos.get(k.t);
+    P.close[i][j] = k.c; P.high[i][j] = k.h; P.low[i][j] = k.l; P.dvol[i][j] = k.v * k.c; }));
+  return P;
+}
+
+// ======================================================================= signals (same as Python engine)
+function computeSignals(P) {
+  const T = P.days.length, N = P.coins.length, H = CFG.horizon;
+  const lp = P.close.map(r => r.map(Math.log));
+  const ret = mat(T, N); for (let t = 1; t < T; t++) for (let j = 0; j < N; j++) ret[t][j] = lp[t][j] - lp[t - 1][j];
+  const vol = mat(T, N), atr = mat(T, N), tr = mat(T, N), clv = mat(T, N);
+  for (let j = 0; j < N; j++) {
+    const r = ret.map(x => x[j]);
+    for (let t = 0; t < T; t++) {
+      vol[t][j] = (() => { const w = r.slice(Math.max(0, t - 29), t + 1).filter(isNum); return w.length >= 15 ? std(w) : NaN; })();
+      const pc = t ? P.close[t - 1][j] : NaN, h = P.high[t][j], l = P.low[t][j];
+      tr[t][j] = Math.max(h - l, isNum(pc) ? Math.abs(h - pc) : 0, isNum(pc) ? Math.abs(l - pc) : 0);
+      clv[t][j] = h > l ? (P.close[t][j] - l) / (h - l) - 0.5 : NaN;
+    }
+    const trj = tr.map(x => x[j]), clj = clv.map(x => x[j]);
+    for (let t = 0; t < T; t++) { atr[t][j] = rollMean(trj, t, 14, 7); clv[t][j] = rollMean(clj, t, 5); }
+  }
+  const S = { mom_28d: mat(T, N), mom_7d: mat(T, N), reversal_3d: mat(T, N), trend_50d: mat(T, N),
+              low_vol: mat(T, N), volume_surge: mat(T, N), close_location: clv };
+  for (let j = 0; j < N; j++) {
+    const lj = lp.map(x => x[j]), dv = P.dvol.map(x => x[j]);
+    for (let t = 0; t < T; t++) {
+      const v = vol[t][j];
+      if (t >= 28) S.mom_28d[t][j] = (lj[t - 3] - lj[t - 28]) / (v * Math.sqrt(25));
+      if (t >= 7) S.mom_7d[t][j] = (lj[t] - lj[t - 7]) / (v * Math.sqrt(7));
+      if (t >= 3) S.reversal_3d[t][j] = -(lj[t] - lj[t - 3]) / (v * Math.sqrt(3));
+      S.trend_50d[t][j] = (lj[t] - rollMean(lj, t, 50, 30)) / v;
+      S.low_vol[t][j] = -v;
+      S.volume_surge[t][j] = Math.log(rollMean(dv, t, 3) / rollMean(dv, t, 30, 15));
+    }
+  }
+  const fwd = mat(T, N);
+  for (let t = 0; t + H < T; t++) {
+    const raw = P.close[t].map((c, j) => Math.log(P.close[t + H][j] / c)); const m = mean(raw);
+    fwd[t] = raw.map(x => isNum(x) ? x - m : NaN);
+  }
+  for (const k in S) S[k] = S[k].map(row => { const r = row.map(x => isNum(x) ? x : NaN);
+    const m = mean(r), s = std(r); return r.map(x => isNum(x) && s > 0 ? Math.max(-3, Math.min(3, (x - m) / s)) : NaN); });
+  return { S, fwd, atr };
+}
+
+// ======================================================================= walk-forward model
+function weightsFrom(icByName) {
+  const out = {}; let tot = 0;
+  for (const [k, list] of Object.entries(icByName)) {
+    const v = list.map(x => x.ic).filter(isNum), n = v.length, m = mean(v), s = std(v);
+    const t = n > 1 && s > 0 ? m / s * Math.sqrt(n) : 0;
+    const raw = n >= CFG.minObs && Math.abs(t) >= CFG.tMin ? m / s : 0;
+    out[k] = { n, meanIc: m, t, raw }; tot += Math.abs(raw);
+  }
+  for (const k in out) out[k].w = tot ? out[k].raw / tot : 0;
+  return out;
+}
+function buildModel(P, sig) {
+  const T = P.days.length, H = CFG.horizon, { S, fwd } = sig;
+  const dates = []; for (let t = T - 1; t >= 0; t -= H) dates.unshift(t);
+  const scored = dates.filter(t => t <= T - 1 - H);
+  const ics = {}; for (const k in S) ics[k] = scored.map(t => ({ t, ic: spearman(S[k][t], fwd[t]) }));
+  const comp = (t, W) => P.coins.map((_, j) => Object.keys(W).reduce((s, k) => s + (isNum(S[k][t][j]) ? S[k][t][j] : 0) * W[k].w, 0));
+  const oosIc = [], oosLs = [];
+  for (const d of scored) {
+    const known = {}; for (const k in ics) known[k] = ics[k].filter(x => x.t <= d - H);
+    const W = weightsFrom(known); if (!Object.values(W).some(x => x.w)) continue;
+    const c = comp(d, W), r = fwd[d], ok = c.map((_, j) => isNum(r[j]) && isNum(P.close[d][j]));
+    const cc = c.filter((_, j) => ok[j]), rr = r.filter((_, j) => ok[j]); if (cc.length < CFG.minCoins) continue;
+    oosIc.push(corr(ranks(cc), ranks(rr)));
+    const ord = cc.map((x, i) => [x, rr[i]]).sort((a, b) => a[0] - b[0]), q = Math.max(1, Math.floor(ord.length / 5));
+    oosLs.push(mean(ord.slice(-q).map(x => x[1])) - mean(ord.slice(0, q).map(x => x[1])));
+  }
+  const W = weightsFrom(ics), last = T - 1, today = comp(last, W);
+  const ranking = P.coins.map((c, j) => ({ coin: c, j, score: today[j] }))
+    .filter(x => isNum(P.close[last][x.j])).sort((a, b) => b.score - a.score);
+  const s = { weeks: oosIc.length, ic: mean(oosIc), hit: mean(oosIc.map(x => x > 0 ? 1 : 0)),
+              sharpe: std(oosLs) > 0 ? mean(oosLs) / std(oosLs) * Math.sqrt(52) : NaN };
+  s.trusted = s.weeks >= 8 && s.ic > 0 && s.hit >= 0.5;
+  return { W, ranking, summary: s };
+}
+
+// ======================================================================= trades
+const tv = c => `https://www.tradingview.com/chart/?symbol=BINANCE:${c}USDT`;
+function regime(P, fng) {
+  const j = P.coins.indexOf("BTC"), c = P.close.map(r => r[j]).filter(isNum);
+  const up = j >= 0 && c.length >= 50 && c.at(-1) > mean(c.slice(-50));
+  let mult = up ? 1 : 0.5; if (isNum(fng) && fng >= 80) mult *= 0.75;
+  return { up, fng, mult };
+}
+function directional(slot, coin, j, side, score, entry, atrv, riskFrac, cap, eq, reg, model, venue) {
+  const sg = side === "LONG" ? 1 : -1, stop = entry - sg * CFG.stopAtr * atrv, target = entry + sg * CFG.targetAtr * atrv;
+  let units = eq * riskFrac * reg.mult / Math.abs(entry - stop); if (units * entry > cap) units = cap / entry;
+  const top = Object.entries(model.W).filter(([, v]) => v.w).sort((a, b) => Math.abs(b[1].w) - Math.abs(a[1].w))
+    .slice(0, 3).map(([k]) => k.replace("_", " "));
+  const conv = !model.summary.trusted ? "Low: model not validated this week, use half size"
+             : Math.abs(score) >= 1 ? "High" : Math.abs(score) >= 0.5 ? "Medium" : "Low";
+  return { slot, sym: coin, side, entry, stop, target, notional: units * entry, risk: units * Math.abs(entry - stop),
+           venue, conv, why: [`Model score ${score >= 0 ? "+" : ""}${score.toFixed(2)} (strongest: ${top.join(", ") || "none"})`,
+           `Stop ${CFG.stopAtr}× / target ${CFG.targetAtr}× daily range (ATR)`], links: { TradingView: tv(coin) } };
+}
+async function pickTrades(P, sig, model, uni, eq, reg, dexRows) {
+  const last = P.days.length - 1, U = new Map(uni.map(u => [u.coin, u])), trades = [];
+  const liquid = new Set([...uni].sort((a, b) => b.vol24 - a.vol24).slice(0, CFG.coreUniverse).map(u => u.coin));
+  // 1. core spot
+  const core = model.ranking.find(r => liquid.has(r.coin) && r.score > 0);
+  trades.push(core ? directional("1 · Core spot", core.coin, core.j, "LONG", core.score, U.get(core.coin).mark,
+    sig.atr[last][core.j], CFG.riskCore, eq * CFG.maxSpotAlloc, eq, reg, model, "Spot, any major exchange") : null);
+  // 2. futures: market-neutral carry first, else directional
+  let fut = null;
+  const carry = uni.filter(u => u.vol24 >= CFG.minFutVol && u.coin !== core?.coin)
+    .map(u => ({ ...u, apr: u.funding1h * 24 * 365 })).filter(u => u.apr >= CFG.carryMinApr)
+    .sort((a, b) => b.apr - a.apr).slice(0, 5);
+  for (const c of carry) {
+    const hist = await loadFunding(c.coin).catch(() => []);
+    const pos = hist.filter(x => x > 0).length / (hist.length || 1);
+    if (hist.length >= 7 && pos >= 0.8) {
+      const notional = eq * 0.3 * reg.mult;
+      fut = { slot: "2 · Futures (market-neutral)", sym: c.coin, side: "CARRY", entry: c.mark, stop: NaN, target: NaN,
+        notional, risk: NaN, venue: "Buy spot + short perp (1×), USDC collateral", conv: "Medium",
+        why: [`Funding ${(c.apr * 100).toFixed(0)}% APR, positive ${Math.round(pos * 100)}% of last ${hist.length} days`,
+              `≈ $${(c.apr / 52 * notional).toFixed(0)}/week income; profit doesn't depend on price`,
+              "Exit if funding drops under 10% APR or turns negative"], links: { TradingView: tv(c.coin) } };
+      break;
+    }
+  }
+  if (!fut) {
+    const cand = model.ranking.filter(r => r.coin !== core?.coin && (U.get(r.coin)?.vol24 || 0) >= CFG.minFutVol)
+      .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
+    if (cand) fut = directional("2 · Futures (perp)", cand.coin, cand.j, cand.score > 0 ? "LONG" : "SHORT", cand.score,
+      U.get(cand.coin).mark, sig.atr[last][cand.j], CFG.riskFut, eq * CFG.maxLev * 0.5, eq, reg, model,
+      `Perpetual futures, isolated margin, max ${CFG.maxLev}×`);
+  }
+  trades.push(fut);
+  // 3. speculative DEX
+  trades.push(pickDex(dexRows, eq, reg));
+  return trades;
+}
+
+// ======================================================================= DexScreener
+async function loadDex() {
+  const seen = new Map();
+  for (const p of ["/token-boosts/top/v1", "/token-boosts/latest/v1", "/token-profiles/latest/v1"]) {
+    try { for (const t of await req(DEX + p, null, 2) || [])
+      if (t.chainId && t.tokenAddress) { const k = t.chainId + "|" + t.tokenAddress;
+        seen.set(k, Math.max(seen.get(k) || 0, +(t.totalAmount || t.amount || 0))); } } catch {}
+  }
+  const byChain = {}; [...seen.keys()].slice(0, 90).forEach(k => { const [c, a] = k.split("|"); (byChain[c] ||= []).push(a); });
+  const jobs = []; for (const [c, as] of Object.entries(byChain)) for (let i = 0; i < as.length; i += 30) jobs.push([c, as.slice(i, i + 30)]);
+  const res = await pool(jobs, 3, ([c, as]) => req(`${DEX}/tokens/v1/${c}/${as.join(",")}`, null, 2));
+  const best = new Map();
+  for (const pairs of res) for (const p of pairs || []) {
+    const k = p.chainId + "|" + p.baseToken.address;
+    if ((p.liquidity?.usd || 0) > (best.get(k)?.liquidity?.usd ?? -1)) best.set(k, p);
+  }
+  return [...best.entries()].map(([k, p]) => {
+    const tx = p.txns?.h24 || {}, buys = +tx.buys || 0, sells = +tx.sells || 0, liq = +p.liquidity?.usd || 0;
+    return { sym: p.baseToken.symbol, chain: p.chainId, dex: p.dexId, url: p.url, price: +p.priceUsd || 0, liq,
+      fdv: +p.fdv || 0, v24: +p.volume?.h24 || 0, v6: +p.volume?.h6 || 0, c24: +p.priceChange?.h24 || 0,
+      c6: +p.priceChange?.h6 || 0, buys, sells, buyRatio: buys / ((buys + sells) || NaN),
+      age: p.pairCreatedAt ? (Date.now() - p.pairCreatedAt) / 864e5 : 0, boost: seen.get(k) || 0 };
+  });
+}
+function pickDex(rows, eq, reg) {
+  const D = CFG.dex, bad = new Set(["USDC","USDT","DAI","WETH","WBTC","SOL","WSOL","ETH"]);
+  const ok = rows.filter(r => !bad.has(r.sym.toUpperCase()) && r.price > 0 && r.liq >= D.minLiq && r.v24 >= D.minVol &&
+    r.age >= D.minAge && r.fdv / r.liq <= D.maxFdvLiq && r.v24 / r.liq <= D.maxVolLiq && r.buyRatio >= 0.5 &&
+    r.c24 > -40 && r.c24 < 300 && r.buys + r.sells >= 300);
+  if (!ok.length) return null;
+  const z = f => { const v = ok.map(f), m = mean(v), s = std(v); return v.map(x => s > 0 ? Math.max(-3, Math.min(3, (x - m) / s)) : 0); };
+  const a = z(r => Math.sign(r.c24) * Math.log1p(Math.abs(r.c24))), b = z(r => Math.max(-50, Math.min(100, r.c6))),
+        c = z(r => r.buyRatio), d = z(r => Math.min(4, r.v6 * 4 / r.v24)), e = z(r => Math.log(r.liq)), f = z(r => Math.log1p(r.boost));
+  ok.forEach((r, i) => r.score = .3 * a[i] + .15 * b[i] + .25 * c[i] + .2 * d[i] + .2 * e[i] - .25 * f[i]);
+  const r = ok.sort((x, y) => y.score - x.score)[0];
+  const stop = r.price * (1 - D.stop), target = r.price * (1 + D.target);
+  let units = eq * CFG.riskSpec * reg.mult / (r.price - stop); if (units * r.price > eq * 0.03) units = eq * 0.03 / r.price;
+  return { slot: "3 · Speculative (DEX)", sym: `${r.sym}`, side: "LONG", entry: r.price, stop, target,
+    notional: units * r.price, risk: units * (r.price - stop), venue: `${r.dex} on ${r.chain}`,
+    conv: "Lottery ticket: size so losing it all doesn't matter",
+    why: [`Liquidity $${fmtK(r.liq)}, 24h volume $${fmtK(r.v24)}, ${r.age.toFixed(0)} days old`,
+          `24h ${r.c24 >= 0 ? "+" : ""}${r.c24.toFixed(0)}%, ${Math.round(r.buyRatio * 100)}% buyers; passed rug filters (#1 of ${ok.length})`,
+          "Check the contract on a honeypot scanner before buying"], links: { DexScreener: r.url } };
+}
+
+// ======================================================================= render
+const fmtK = x => x >= 1e9 ? (x / 1e9).toFixed(1) + "B" : x >= 1e6 ? (x / 1e6).toFixed(1) + "M" : x >= 1e3 ? (x / 1e3).toFixed(0) + "k" : x.toFixed(0);
+const px = x => !isNum(x) ? "—" : x >= 100 ? x.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  : x >= 1 ? x.toFixed(4) : x.toPrecision(4);
+const usd = x => isNum(x) ? "$" + Math.round(x).toLocaleString() : "—";
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+function renderCards(trades) {
+  const box = document.getElementById("cards"); box.replaceChildren();
+  const names = ["1 · Core spot", "2 · Futures", "3 · Speculative (DEX)"];
+  trades.forEach((t, i) => {
+    const c = el("div", "card");
+    if (!t) { c.append(el("div", "slot", names[i]), el("div", "empty", "No trade passes the filters this week. Stay in stablecoins.")); box.append(c); return; }
+    const head = el("div", "head"); head.append(el("div", "sym", t.sym), el("span", "side " + t.side, t.side === "CARRY" ? "LONG SPOT / SHORT PERP" : t.side));
+    const tb = el("table");
+    const rows = t.side === "CARRY"
+      ? [["Price", px(t.entry)], ["Per leg", usd(t.notional)], ["Hold", "While funding stays positive"]]
+      : [["Entry", px(t.entry)], ["Stop", px(t.stop)], ["Target", px(t.target)], ["Position size", usd(t.notional)], ["Max loss", usd(t.risk)], ["Hold", "Up to 7 days"]];
+    rows.forEach(([k, v]) => { const tr = el("tr"); tr.append(el("td", null, k), el("td", null, v)); tb.append(tr); });
+    const ul = el("ul", "why"); t.why.forEach(w => ul.append(el("li", null, w)));
+    const links = el("div", "links"); Object.entries(t.links).forEach(([k, u]) => { const a = el("a", null, k + " ↗"); a.href = u; a.target = "_blank"; a.rel = "noopener"; links.append(a); });
+    c.append(el("div", "slot", t.slot), head, el("div", "conv", t.venue), tb, ul, el("div", "conv", "Conviction: " + t.conv), links);
+    box.append(c);
+  });
+}
+function renderHealth(model, reg) {
+  const s = model.summary, h = document.getElementById("health"); h.hidden = false; h.replaceChildren();
+  const b = el("b", s.trusted ? "ok" : "bad", s.trusted ? "Model validated" : "Model NOT validated: halve sizes or paper-trade");
+  h.append(b, document.createTextNode(` · tested on ${s.weeks} past weeks it never saw, right ${isNum(s.hit) ? Math.round(s.hit * 100) : "—"}% of weeks` +
+    ` · market ${reg.up ? "uptrend" : "downtrend (sizes halved)"}${isNum(reg.fng) ? ` · Fear & Greed ${reg.fng}` : ""}`));
+}
+function renderMore(model) {
+  const box = document.getElementById("moreBody"); box.replaceChildren(); document.getElementById("more").hidden = false;
+  const tb = el("table"); const hd = el("tr"); ["Signal", "Edge (IC)", "t-stat", "Weight"].forEach(x => hd.append(el("td", null, x))); tb.append(hd);
+  Object.entries(model.W).sort((a, b) => Math.abs(b[1].w) - Math.abs(a[1].w)).forEach(([k, v]) => {
+    const tr = el("tr"); [k.replace("_", " "), isNum(v.meanIc) ? v.meanIc.toFixed(3) : "—", v.t.toFixed(1), v.w.toFixed(2)].forEach(x => tr.append(el("td", null, x))); tb.append(tr); });
+  const r = model.ranking;
+  box.append(el("p", null, "Weights are learned from data, and a signal that isn't clearly better than chance gets zero weight."), tb,
+    el("p", null, "Strongest: " + r.slice(0, 6).map(x => `${x.coin} ${x.score.toFixed(2)}`).join(", ")),
+    el("p", null, "Weakest: " + r.slice(-6).reverse().map(x => `${x.coin} ${x.score.toFixed(2)}`).join(", ")));
+}
+
+// ======================================================================= main
+let cache = null;
+const status = t => document.getElementById("status").textContent = t;
+async function run() {
+  const btn = document.getElementById("run"), eq = Math.max(100, +document.getElementById("equity").value || 10000);
+  try { localStorage.setItem("equity", eq); } catch {}
+  btn.disabled = true;
+  try {
+    if (!cache) {
+      status("Loading markets…");
+      const uni = await loadUniverse();
+      const coins = [...uni].sort((a, b) => b.vol24 - a.vol24).slice(0, CFG.universe).map(u => u.coin);
+      let done = 0;
+      const candles = await pool(coins, 5, async c => { const k = await loadCandles(c); status(`Loading price history ${++done}/${coins.length}…`); return k; });
+      const keep = coins.map((c, i) => candles[i] && candles[i].length >= 60 ? i : -1).filter(i => i >= 0);
+      const P = buildPanel(keep.map(i => coins[i]), keep.map(i => candles[i]));
+      status("Scanning DEX tokens…");
+      const [dex, fng] = await Promise.all([loadDex().catch(() => []), loadFearGreed()]);
+      status("Running model…"); await sleep(10);
+      const sig = computeSignals(P), model = buildModel(P, sig);
+      cache = { P, sig, model, uni: uni.filter(u => P.coins.includes(u.coin)), dex, reg: regime(P, fng) };
+    }
+    const { P, sig, model, uni, dex, reg } = cache;
+    const trades = await pickTrades(P, sig, model, uni, eq, reg, dex);
+    renderHealth(model, reg); renderCards(trades); renderMore(model);
+    status("Updated " + new Date().toLocaleString());
+  } catch (e) {
+    status("Couldn't load live data (" + e.message + "). Check your connection and press Refresh.");
+  } finally { btn.disabled = false; }
+}
+try { const s = localStorage.getItem("equity"); if (s) document.getElementById("equity").value = s; } catch {}
+document.getElementById("run").addEventListener("click", () => { cache = null; run(); });
+document.getElementById("equity").addEventListener("change", () => cache && run());
+run();
+</script>
+</body>
+</html>

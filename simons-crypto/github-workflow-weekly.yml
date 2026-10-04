@@ -1,0 +1,21 @@
+# Copy to .github/workflows/weekly-picks.yml in its own repo.
+name: weekly-crypto-picks
+on:
+  schedule:
+    - cron: "47 12 * * 1"   # Mondays 12:47 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  picks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python run_weekly.py --equity 10000
+      - run: |
+          git config user.name "picks-bot"
+          git config user.email "picks-bot@users.noreply.github.com"
+          git add reports && git commit -m "Weekly picks $(date -u +%G-W%V)" && git push || echo "nothing to commit"

@@ -71,7 +71,7 @@ summary{cursor:pointer;font-weight:600}
 const CFG = {
   universe: 40, historyDays: 320, horizon: 7, coreUniverse: 25, minFutVol: 20e6,
   riskCore: 0.01, riskFut: 0.01, riskSpec: 0.0025, maxSpotAlloc: 0.25, maxLev: 3,
-  stopAtr: 2, targetAtr: 3, carryMinApr: 0.25,
+  stopAtr: 2, targetAtr: 3, carryMinNetApr: 0.15, carryFeeApr: 0.104,
   minCoins: 8, minObs: 12, tMin: 1.0,
   dex: { minLiq: 150e3, minVol: 250e3, minAge: 7, maxFdvLiq: 60, maxVolLiq: 25, stop: 0.25, target: 0.6 },
 };
@@ -240,9 +240,11 @@ function regime(P, fng) {
   let mult = up ? 1 : 0.5; if (isNum(fng) && fng >= 80) mult *= 0.75;
   return { up, fng, mult };
 }
+// Directional size scales with out-of-sample Sharpe: full size only at 1.0+
+const edgeMult = m => !m.summary.trusted || !isNum(m.summary.sharpe) ? 0.25 : Math.min(1, Math.max(0.25, m.summary.sharpe));
 function directional(slot, coin, j, side, score, entry, atrv, riskFrac, cap, eq, reg, model, venue) {
   const sg = side === "LONG" ? 1 : -1, stop = entry - sg * CFG.stopAtr * atrv, target = entry + sg * CFG.targetAtr * atrv;
-  let units = eq * riskFrac * reg.mult / Math.abs(entry - stop); if (units * entry > cap) units = cap / entry;
+  let units = eq * riskFrac * reg.mult * edgeMult(model) / Math.abs(entry - stop); if (units * entry > cap) units = cap / entry;
   const top = Object.entries(model.W).filter(([, v]) => v.w).sort((a, b) => Math.abs(b[1].w) - Math.abs(a[1].w))
     .slice(0, 3).map(([k]) => k.replace("_", " "));
   const conv = !model.summary.trusted ? "Low: model not validated this week, use half size"
@@ -261,20 +263,23 @@ async function pickTrades(P, sig, model, uni, eq, reg, dexRows) {
   // 2. futures: market-neutral carry first, else directional
   let fut = null;
   const carry = uni.filter(u => u.vol24 >= CFG.minFutVol && u.coin !== core?.coin)
-    .map(u => ({ ...u, apr: u.funding1h * 24 * 365 })).filter(u => u.apr >= CFG.carryMinApr)
-    .sort((a, b) => b.apr - a.apr).slice(0, 5);
+    .map(u => ({ ...u, apr: u.funding1h * 24 * 365 })).filter(u => u.apr >= 0.05)
+    .sort((a, b) => b.apr - a.apr).slice(0, 10);
+  let best = null;
   for (const c of carry) {
     const hist = await loadFunding(c.coin).catch(() => []);
     const pos = hist.filter(x => x > 0).length / (hist.length || 1);
-    if (hist.length >= 7 && pos >= 0.8) {
-      const notional = eq * 0.3 * reg.mult;
-      fut = { slot: "2 · Futures (market-neutral)", sym: c.coin, side: "CARRY", entry: c.mark, stop: NaN, target: NaN,
-        notional, risk: NaN, venue: "Buy spot + short perp (1×), USDC collateral", conv: "Medium",
-        why: [`Funding ${(c.apr * 100).toFixed(0)}% APR, positive ${Math.round(pos * 100)}% of last ${hist.length} days`,
-              `≈ $${(c.apr / 52 * notional).toFixed(0)}/week income; profit doesn't depend on price`,
-              "Exit if funding drops under 10% APR or turns negative"], links: { TradingView: tv(c.coin) } };
-      break;
-    }
+    // Funding mean-reverts fast: forecast with the 14-day average, not today's print
+    const forecast = mean(hist) * 24 * 365, net = forecast - CFG.carryFeeApr;
+    if (hist.length >= 10 && pos >= 0.8 && net >= CFG.carryMinNetApr && (!best || net > best.net)) best = { c, hist, pos, forecast, net };
+  }
+  if (best) {
+    const { c, hist, pos, forecast, net } = best, notional = eq * 0.3 * reg.mult;
+    fut = { slot: "2 · Futures (market-neutral)", sym: c.coin, side: "CARRY", entry: c.mark, stop: NaN, target: NaN,
+      notional, risk: NaN, venue: "Buy spot + short perp (1×), USDC collateral", conv: "Medium",
+      why: [`14-day average funding ${(forecast * 100).toFixed(0)}% APR (today ${(c.apr * 100).toFixed(0)}%), positive ${Math.round(pos * 100)}% of ${hist.length} days`,
+            `After fees ≈ ${(net * 100).toFixed(0)}% APR, ≈ $${(net / 52 * notional).toFixed(0)}/week; profit doesn't depend on price`,
+            "Exit if funding drops under 10% APR or turns negative"], links: { TradingView: tv(c.coin) } };
   }
   if (!fut) {
     const cand = model.ranking.filter(r => r.coin !== core?.coin && (U.get(r.coin)?.vol24 || 0) >= CFG.minFutVol)

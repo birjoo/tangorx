@@ -26,7 +26,8 @@ class Config:
     max_leverage: float = 3.0
     core_universe: int = 25         # top-N perps by volume treated as "large cap"
     min_futures_volume: float = 20e6
-    carry_min_apr: float = 0.25     # 25% annualised funding before carry beats directional
+    carry_min_net_apr: float = 0.15 # forecast funding minus fees must clear this
+    carry_fee_apr: float = 0.104    # ~0.2% round trip on both legs, re-paid weekly
     stop_atr: float = 2.0
     target_atr: float = 3.0
     # DEX rug filters
@@ -81,6 +82,14 @@ def _size(cfg: Config, risk_frac: float, entry: float, stop: float, mult: float,
     return units, units * entry, units * per_unit
 
 
+def edge_multiplier(model) -> float:
+    """Scale directional risk by out-of-sample Sharpe: full size only at Sharpe >= 1."""
+    sh = model.summary["oos_ls_sharpe"]
+    if not model.trustworthy or sh != sh:
+        return 0.25
+    return float(min(1.0, max(0.25, sh)))
+
+
 def _conviction(score: float, trustworthy: bool) -> str:
     if not trustworthy:
         return "LOW (model not validated out-of-sample)"
@@ -114,7 +123,7 @@ def pick_core_spot(cfg, model, universe, panel, atr_df, reg, news_ctx, tv) -> Tr
         if coin not in liquid or score <= 0 or blocked(coin, news_ctx):
             continue
         return _directional(cfg, coin, "LONG", score, model, atr_df[coin].iloc[-1], universe.loc[coin, "mark"],
-                            reg["risk_multiplier"], "1. CORE SPOT", "Any major spot exchange (paid in USDC/USDT)",
+                            reg["risk_multiplier"] * edge_multiplier(model), "1. CORE SPOT", "Any major spot exchange (paid in USDC/USDT)",
                             cfg.equity * cfg.max_spot_alloc, news_ctx, tv)
     return None
 
@@ -128,28 +137,32 @@ def carry_candidates(cfg, universe) -> pd.DataFrame:
 def pick_futures(cfg, model, universe, panel, atr_df, reg, news_ctx, tv, exclude: set[str]) -> Trade | None:
     carry = carry_candidates(cfg, universe)
     fund_hist = panel["funding"]
+    best = None
     for coin, row in carry.iterrows():
-        if row["funding_apr"] < cfg.carry_min_apr:
-            break
-        if coin in exclude or blocked(coin, news_ctx):
+        if row["funding_apr"] < 0.05 or coin in exclude or blocked(coin, news_ctx):
             continue
         hist = fund_hist[coin].dropna().tail(14) if coin in fund_hist else pd.Series(dtype=float)
-        persistent = len(hist) >= 7 and (hist > 0).mean() >= 0.8
-        if not persistent:
-            continue  # one-off spikes mean-revert before you collect them
+        if len(hist) < 10 or (hist > 0).mean() < 0.8:
+            continue
+        # Funding mean-reverts fast: forecast next week with the 14-day average, not today's print
+        forecast = float(hist.mean() * 24 * 365)
+        net = forecast - cfg.carry_fee_apr
+        if net >= cfg.carry_min_net_apr and (best is None or net > best[2]):
+            best = (coin, row, net, forecast, hist)
+    if best:
+        coin, row, net, forecast, hist = best
         notional = cfg.equity * 0.30 * reg["risk_multiplier"]  # per leg
         mark = float(row["mark"])
-        weekly = row["funding_apr"] / 52 * notional
         return Trade("2. FUTURES (market-neutral carry)", coin, "LONG SPOT + SHORT PERP (1x, delta-neutral)",
                      "Spot on any CEX + short perp on Hyperliquid, USDC collateral", mark, float("nan"),
-                     float("nan"), notional / mark, notional, 0.0, 7,
-                     "MEDIUM",
-                     [f"Current funding {row['funding_apr']:.0%} APR, positive on "
+                     float("nan"), notional / mark, notional, 0.0, 7, "MEDIUM",
+                     [f"14-day average funding {forecast:.0%} APR (today {row['funding_apr']:.0%}), positive on "
                       f"{(hist > 0).mean():.0%} of last {len(hist)} days",
-                      f"Expected funding income ~${weekly:,.0f}/week on ${notional:,.0f} per leg",
+                      f"After ~{cfg.carry_fee_apr:.0%} APR of trading fees: ~{net:.0%} APR, "
+                      f"~${net / 52 * notional:,.0f}/week on ${notional:,.0f} per leg",
                       "Price-neutral: profit is the funding longs pay you; exit if APR < 10% or flips negative",
                       "Risks: funding flip, exchange risk, liquidation of perp leg if under-margined (keep >=50% margin)"],
-                     {"tradingview": tradingview_link(coin)}, {"funding_apr": float(row["funding_apr"])})
+                     {"tradingview": tradingview_link(coin)}, {"funding_apr": forecast, "net_apr": net})
 
     liquid = universe[universe["volume_24h_usd"] >= cfg.min_futures_volume].index
     comp = model.composite_today[model.composite_today.index.isin(liquid)]
@@ -161,7 +174,7 @@ def pick_futures(cfg, model, universe, panel, atr_df, reg, news_ctx, tv, exclude
         side = "LONG" if score > 0 else "SHORT"
         cap = cfg.equity * cfg.max_leverage * 0.5
         t = _directional(cfg, coin, side, score, model, atr_df[coin].iloc[-1], universe.loc[coin, "mark"],
-                         reg["risk_multiplier"], "2. FUTURES (directional perp)",
+                         reg["risk_multiplier"] * edge_multiplier(model), "2. FUTURES (directional perp)",
                          f"Perpetual futures (e.g. Hyperliquid), isolated margin, <= {cfg.max_leverage:.0f}x",
                          cap, news_ctx, tv)
         t.extra["margin_at_max_lev"] = t.notional_usd / cfg.max_leverage

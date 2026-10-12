@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .strategy import Trade
+from .strategy import Trade, edge_multiplier
 
 
 def _px(x: float) -> str:
@@ -31,7 +31,9 @@ def render(asof: pd.Timestamp, trades: list[Trade], model, reg: dict, cfg, pegs:
           f"- BTC above 50-day average: **{'yes' if reg['btc_above_50d'] else 'no'}**",
           f"- BTC 30d realised vol (ann.): {reg['btc_vol_ann']:.0%}" if reg['btc_vol_ann'] == reg['btc_vol_ann'] else "- BTC vol: n/a",
           f"- Fear & Greed: {reg['fear_greed']:.0f}" if reg['fear_greed'] == reg['fear_greed'] else "- Fear & Greed: n/a",
-          f"- Risk multiplier applied to all sizes: **{reg['risk_multiplier']:.2f}x**", "",
+          f"- Risk multiplier applied to all sizes: **{reg['risk_multiplier']:.2f}x**",
+          f"- Model-strength multiplier on directional trades: **{edge_multiplier(model):.2f}x** "
+          "(scales with out-of-sample Sharpe, full size only at 1.0+)", "",
           "## Model health (walk-forward, out-of-sample)", "",
           f"- Weeks tested: {s['oos_weeks']}",
           f"- Mean rank IC: {s['oos_mean_ic']:+.3f}  (0.02–0.05 is a real edge at scale)",

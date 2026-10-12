@@ -68,7 +68,8 @@ class ModelReport:
     @property
     def trustworthy(self) -> bool:
         s = self.summary
-        return s["oos_weeks"] >= 8 and s["oos_mean_ic"] > 0.0 and s["oos_ic_hit_rate"] >= 0.5
+        return (s["oos_weeks"] >= 8 and s["oos_mean_ic"] > 0.0 and s["oos_ic_hit_rate"] >= 0.5
+                and s["oos_ls_sharpe"] > 0.0)
 
 
 def build_model(signals: dict[str, pd.DataFrame], close: pd.DataFrame,

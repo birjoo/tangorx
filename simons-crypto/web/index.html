@@ -228,7 +228,7 @@ function buildModel(P, sig) {
     .filter(x => isNum(P.close[last][x.j])).sort((a, b) => b.score - a.score);
   const s = { weeks: oosIc.length, ic: mean(oosIc), hit: mean(oosIc.map(x => x > 0 ? 1 : 0)),
               sharpe: std(oosLs) > 0 ? mean(oosLs) / std(oosLs) * Math.sqrt(52) : NaN };
-  s.trusted = s.weeks >= 8 && s.ic > 0 && s.hit >= 0.5;
+  s.trusted = s.weeks >= 8 && s.ic > 0 && s.hit >= 0.5 && s.sharpe > 0;
   return { W, ranking, summary: s };
 }
 

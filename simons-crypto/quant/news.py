@@ -44,6 +44,9 @@ def coin_news(coins: list[str], heads: pd.DataFrame) -> pd.DataFrame:
 
 
 def blocked(coin: str, news: pd.DataFrame) -> list[str]:
-    if coin in news.index:
-        return list(news.loc[coin, "risk_headlines"])
-    return []
+    """Risk headlines, if they are a meaningful share of the coin's coverage. BTC gets dozens of
+    mentions a week, so one lawsuit about a single wallet should not veto it."""
+    if coin not in news.index:
+        return []
+    risk, mentions = list(news.loc[coin, "risk_headlines"]), int(news.loc[coin, "mentions"])
+    return risk if len(risk) >= max(1, 0.1 * mentions) else []

@@ -84,15 +84,17 @@ def perp_universe() -> pd.DataFrame:
     return df[~df.index.isin(STABLECOINS)]
 
 
-def daily_candles(coin: str, days: int) -> pd.DataFrame:
+def daily_candles(coin: str, days: int, interval: str = "1d") -> pd.DataFrame:
     end = int(datetime.now(timezone.utc).timestamp() * 1000)
     start = end - days * 86_400_000
     raw = _post(HL_INFO, {"type": "candleSnapshot",
-                          "req": {"coin": coin, "interval": "1d", "startTime": start, "endTime": end}})
+                          "req": {"coin": coin, "interval": interval, "startTime": start, "endTime": end}})
     if not raw:
         return pd.DataFrame()
     df = pd.DataFrame(raw)
-    df["date"] = pd.to_datetime(df["t"], unit="ms", utc=True).dt.normalize()
+    df["date"] = pd.to_datetime(df["t"], unit="ms", utc=True)
+    if interval == "1d":
+        df["date"] = df["date"].dt.normalize()
     out = df.set_index("date")[["o", "h", "l", "c", "v"]].astype(float)
     out.columns = ["open", "high", "low", "close", "volume"]
     return out
@@ -119,19 +121,38 @@ def funding_history(coin: str, days: int) -> pd.Series:
     return df.assign(r=df["fundingRate"].astype(float)).groupby("date")["r"].mean()
 
 
-def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_days: int = 120) -> dict[str, pd.DataFrame]:
-    """Wide panels (date x coin) for close/high/low/volume/funding."""
-    closes, highs, lows, vols, funds = {}, {}, {}, {}, {}
+def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_days: int = 400,
+               cache_dir: str | None = None) -> dict[str, pd.DataFrame]:
+    """Wide panels (date x coin): close/high/low/dollar_volume/funding, plus close_4h (4-hour bars).
+    With cache_dir, a panel already downloaded today is reused."""
+    if cache_dir:
+        import hashlib
+        import pickle
+        from pathlib import Path
+        key = hashlib.md5(f"{sorted(coins)}|{days}|{funding_days}|{datetime.now(timezone.utc):%Y-%m-%d}".encode()).hexdigest()[:12]
+        path = Path(cache_dir) / f"panel-{key}.pkl"
+        if path.exists():
+            return pickle.loads(path.read_bytes())
+        panel = load_panel(coins, days, with_funding, funding_days)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(pickle.dumps(panel))
+        return panel
+    closes, highs, lows, vols, funds, c4h = {}, {}, {}, {}, {}, {}
     for i, coin in enumerate(coins):
         c = daily_candles(coin, days)
         if len(c) < 60:
             continue
         closes[coin], highs[coin], lows[coin], vols[coin] = c["close"], c["high"], c["low"], c["volume"] * c["close"]
+        try:
+            c4h[coin] = daily_candles(coin, days, "4h")["close"]
+        except requests.RequestException:
+            pass
         if with_funding:
             funds[coin] = funding_history(coin, min(days, funding_days))
         time.sleep(0.15)
     panel = {k: pd.DataFrame(v).sort_index() for k, v in
              dict(close=closes, high=highs, low=lows, dollar_volume=vols).items()}
+    panel["close_4h"] = pd.DataFrame(c4h).sort_index()
     panel["funding"] = (pd.DataFrame(funds).reindex(panel["close"].index) if funds
                         else pd.DataFrame(0.0, index=panel["close"].index, columns=panel["close"].columns))
     return panel
@@ -206,6 +227,19 @@ def flatten_dex_pair(p: dict, boost: float = 0.0) -> dict:
         "age_days": ((time.time() * 1000 - p["pairCreatedAt"]) / 86_400_000) if p.get("pairCreatedAt") else 0.0,
         "boost": boost,
     }
+
+
+def cross_venue_funding() -> pd.DataFrame:
+    """Next funding on Hyperliquid, Binance and Bybit per coin, annualised (APR)."""
+    rows = []
+    for coin, venues in _post(HL_INFO, {"type": "predictedFundings"}) or []:
+        row = {"coin": coin}
+        for venue, info in venues:
+            if info and info.get("fundingRate") is not None:
+                hrs = float(info.get("fundingIntervalHours") or 8)
+                row[venue] = float(info["fundingRate"]) / hrs * 24 * 365
+        rows.append(row)
+    return pd.DataFrame(rows).set_index("coin")
 
 
 def stablecoin_pegs() -> pd.DataFrame:

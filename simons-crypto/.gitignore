@@ -4,3 +4,4 @@ reports/*-demo.json
 run.log
 live.md
 reports/*.json
+.cache/

@@ -47,7 +47,48 @@ def compute_signals(panel: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         # Close location in daily range (buying pressure into the close)
         "close_location": (((close - low) / (high - low).replace(0, np.nan)) - 0.5).rolling(5).mean(),
     }
+    sig.update(compute_signals_v2(panel))
     return {k: v.replace([np.inf, -np.inf], np.nan) for k, v in sig.items()}
+
+
+V2_SIGNALS = ["resid_rev_5d", "low_beta", "max_effect", "fip_28d", "funding_change", "skew_4h", "asia_minus_us"]
+
+
+def compute_signals_v2(panel: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """Second-generation signals: market-residual stat-arb (Renaissance's bread and butter),
+    lottery/skew effects, path quality of momentum, funding dynamics, and intraday session flow."""
+    close, fund = panel["close"], panel["funding"]
+    ret = np.log(close).diff()
+    mkt = ret.mean(axis=1)  # equal-weight crypto market
+    cov = ret.rolling(60, min_periods=30).cov(mkt)
+    beta = cov.div(mkt.rolling(60, min_periods=30).var(), axis=0)
+    resid = ret - beta.mul(mkt, axis=0)
+    rvol = resid.rolling(30, min_periods=15).std()
+    sig = {
+        # Idiosyncratic moves (after removing the market) tend to mean-revert
+        "resid_rev_5d": -resid.rolling(5).sum() / (rvol * np.sqrt(5)),
+        # Low-beta coins earn more per unit of risk
+        "low_beta": -beta,
+        # Lottery effect: coins with one huge up-day are overbought
+        "max_effect": -ret.rolling(30, min_periods=15).max(),
+        # Frog-in-the-pan: momentum built from many small moves persists better than from jumps
+        "fip_28d": np.sign(ret.rolling(28).sum()) * ((ret > 0).astype(float).rolling(28).mean()
+                                                      - (ret < 0).astype(float).rolling(28).mean()),
+        # Funding rising faster than its own norm = longs crowding in
+        "funding_change": -(fund.rolling(7, min_periods=3).mean() - fund.rolling(30, min_periods=10).mean()),
+    }
+    c4 = panel.get("close_4h")
+    if c4 is not None and not c4.empty:
+        r4 = np.log(c4).diff()
+        day = r4.index.normalize()
+        # Negative skew of 4h returns over 14 days, sampled at day end
+        sig["skew_4h"] = -r4.rolling(84, min_periods=42).skew().groupby(day).last().reindex(close.index)
+        # Returns made in Asia hours (00-08 UTC) minus US hours (12-20 UTC), last 14 days
+        hrs = r4.index.hour
+        asia = r4.where((hrs >= 0) & (hrs < 8), 0.0).groupby(day).sum()
+        us = r4.where((hrs >= 12) & (hrs < 20), 0.0).groupby(day).sum()
+        sig["asia_minus_us"] = (asia - us).rolling(14, min_periods=7).sum().reindex(close.index)
+    return sig
 
 
 def forward_returns(close: pd.DataFrame, horizon: int = HORIZON) -> pd.DataFrame:

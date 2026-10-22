@@ -6,3 +6,5 @@ live.md
 reports/*.json
 .cache/
 fetch.log
+demo.err
+reports/*-demo.md

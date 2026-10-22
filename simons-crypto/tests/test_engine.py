@@ -104,3 +104,31 @@ def test_journal(tmp_path):
     append_journal(p, pd.Timestamp("2026-10-04"), [core])
     append_journal(p, pd.Timestamp("2026-10-11"), [core])
     assert len(pd.read_csv(p)) == 2
+
+
+def test_v2_slots():
+    from quant.strategy import pick_spec_futures, pick_spot_trades, pick_stablecoin
+    panel, universe, model = _setup()
+    cfg, a = Config(), atr(panel)
+    reg = regime(panel["close"], pd.Series(dtype=float))
+    news = coin_news(list(panel["close"].columns), pd.DataFrame({"title": []}))
+    spots = pick_spot_trades(cfg, model, universe, a, reg, news, pd.Series(dtype=float), n=2)
+    assert len(spots) == 2 and spots[0].symbol != spots[1].symbol
+    assert sum(t.risk_usd for t in spots) <= cfg.equity * cfg.risk_core + 1e-6
+    session = pd.Series(1.0, index=universe.index)
+    spec = pick_spec_futures(cfg, model, universe, a, reg, news, pd.Series(dtype=float), session,
+                             exclude={t.symbol for t in spots})
+    assert spec is None or (spec.symbol not in {t.symbol for t in spots} and spec.side == "LONG")
+    hold = pick_stablecoin(cfg, reg, pd.DataFrame(), pd.DataFrame(), 0.04)
+    assert hold.side.startswith("HOLD")
+    carry = pd.DataFrame({"today_apr": [0.6], "avg14_apr": [0.4], "positive_days": [1.0], "net_apr": [0.3]},
+                         index=["ABC"])
+    assert pick_stablecoin(cfg, reg, carry, pd.DataFrame(), 0.04).bucket == "2. STABLECOIN CARRY"
+
+
+def test_fixed_model_drops_missing_signals():
+    from quant.backtest import FIXED_V2
+    panel, _ = make_market()
+    m = build_model(compute_signals(panel), panel["close"], fixed=FIXED_V2)
+    assert "asia_minus_us" not in m.weights.index
+    assert abs(m.weights["weight"].abs().sum() - 1) < 1e-9

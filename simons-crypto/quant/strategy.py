@@ -82,12 +82,15 @@ def _size(cfg: Config, risk_frac: float, entry: float, stop: float, mult: float,
     return units, units * entry, units * per_unit
 
 
+NEW_MODEL_CAP = 0.5  # v2 model adopted 2026-10-22: half size until it has 8 live weeks
+
+
 def edge_multiplier(model) -> float:
-    """Scale directional risk by out-of-sample Sharpe: full size only at Sharpe >= 1."""
-    sh = model.summary["oos_ls_sharpe"]
-    if not model.trustworthy or sh != sh:
+    """Scale directional risk by the *recent* (last 26 weeks) out-of-sample Sharpe: full size only at 1.0+."""
+    sh = model.summary.get("recent_ls_sharpe", model.summary["oos_ls_sharpe"])
+    if not model.trustworthy or sh != sh or sh <= 0:
         return 0.25
-    return float(min(1.0, max(0.25, sh)))
+    return float(min(NEW_MODEL_CAP, max(0.25, sh)))
 
 
 def _conviction(score: float, trustworthy: bool) -> str:
@@ -231,3 +234,77 @@ def pick_speculative(cfg, dex_scored: pd.DataFrame, reg) -> Trade | None:
                   "Verify contract on a token scanner (honeypot/mint authority) before buying",
                   "Use limit orders, max 1% slippage; size so a total loss is irrelevant"],
                  {"dexscreener": r["url"]}, {"address": r["address"], "score": float(r["score"])})
+
+
+# ---------------------------------------------------------------- v2 slots (2026-10-22)
+def pick_spot_trades(cfg, model, universe, atr_df, reg, news_ctx, tv, n: int = 2) -> list[Trade]:
+    """Top-n longs among the most liquid coins, bought with stablecoins. Core risk is split across them."""
+    liquid = universe.sort_values("volume_24h_usd", ascending=False).head(cfg.core_universe).index
+    out = []
+    for coin, score in model.composite_today.items():
+        if len(out) == n:
+            break
+        if coin not in liquid or score <= 0 or blocked(coin, news_ctx):
+            continue
+        out.append(_directional(cfg, coin, "LONG", score, model, atr_df[coin].iloc[-1], universe.loc[coin, "mark"],
+                                reg["risk_multiplier"] * edge_multiplier(model) / n,
+                                f"1{'ab'[len(out)]}. SPOT (paid with stablecoins)",
+                                "Any major spot exchange, buy with USDC/USDT", cfg.equity * cfg.max_spot_alloc / n,
+                                news_ctx, tv))
+    return out
+
+
+def pick_spec_futures(cfg, model, universe, atr_df, reg, news_ctx, tv, session_z: pd.Series,
+                      exclude: set[str]) -> Trade | None:
+    """'Showing promise': a mid-cap (not a top-10 major) with a positive composite and the strongest
+    Asia-session buying. Long perp, half the normal futures risk."""
+    liquid = universe[universe["volume_24h_usd"] >= cfg.min_futures_volume]
+    majors = set(universe.sort_values("volume_24h_usd", ascending=False).head(10).index)
+    cands = [c for c, s in model.composite_today.items()
+             if s > 0 and c in liquid.index and c not in majors and c not in exclude
+             and session_z.get(c, float("nan")) > 0 and not blocked(c, news_ctx)]
+    if not cands:
+        return None
+    coin = max(cands, key=lambda c: session_z[c])
+    t = _directional(cfg, coin, "LONG", float(model.composite_today[coin]), model, atr_df[coin].iloc[-1],
+                     universe.loc[coin, "mark"], reg["risk_multiplier"] * edge_multiplier(model) * 0.5,
+                     "3. SPECULATIVE FUTURES", f"Perpetual futures (e.g. Hyperliquid), isolated margin, <= {cfg.max_leverage:.0f}x",
+                     cfg.equity * cfg.max_leverage * 0.25, news_ctx, tv)
+    t.rationale.insert(1, f"Strongest Asia-session buying among mid-caps (z {session_z[coin]:+.2f})")
+    t.extra["margin_at_max_lev"] = t.notional_usd / cfg.max_leverage
+    t.extra["funding_apr"] = float(universe.loc[coin, "funding_1h"] * 24 * 365)
+    return t
+
+
+def pick_stablecoin(cfg, reg, carry: pd.DataFrame, xvenue: pd.DataFrame, hlp: float) -> Trade:
+    """Best price-neutral use of stablecoins this week, or hold."""
+    notional = cfg.equity * 0.30 * reg["risk_multiplier"]
+    if len(carry) and carry.iloc[0]["net_apr"] >= cfg.carry_min_net_apr and carry.iloc[0]["positive_days"] >= 0.8:
+        coin, r = carry.index[0], carry.iloc[0]
+        return Trade("2. STABLECOIN CARRY", coin, "LONG SPOT + SHORT PERP (1x, delta-neutral)",
+                     "Spot on any CEX + short perp on Hyperliquid, USDC collateral", float("nan"), float("nan"),
+                     float("nan"), 0.0, notional, 0.0, 7, "MEDIUM",
+                     [f"14-day average funding {r['avg14_apr']:.0%} APR (today {r['today_apr']:.0%}), "
+                      f"positive {r['positive_days']:.0%} of days",
+                      f"After fees ~{r['net_apr']:.0%} APR, ~${r['net_apr'] / 52 * notional:,.0f}/week per ${notional:,.0f} leg",
+                      "Exit if funding drops under 10% APR; keep >=50% margin on the short"],
+                     {"tradingview": tradingview_link(coin)}, {"net_apr": float(r["net_apr"])})
+    ok = xvenue[(xvenue["persistent"]) & (xvenue["net_apr"] >= cfg.carry_min_net_apr)] if len(xvenue) else xvenue
+    if len(ok):
+        coin, r = ok.index[0], ok.iloc[0]
+        hi, lo = ("Hyperliquid", r["other_venue"]) if r["gap_apr"] > 0 else (r["other_venue"], "Hyperliquid")
+        return Trade("2. STABLECOIN CROSS-EXCHANGE FUNDING", coin, f"SHORT PERP on {hi} + LONG PERP on {lo}",
+                     "Two perp exchanges, USDC/USDT collateral on both", float("nan"), float("nan"), float("nan"),
+                     0.0, notional, 0.0, 7, "LOW-MEDIUM (other venue has no funding history here)",
+                     [f"Funding gap {abs(r['gap_apr']):.0%} APR (Hyperliquid {r['hl_apr']:.0%}, "
+                      f"{r['other_venue']} {r['other_apr']:.0%}); Hyperliquid 14-day avg {r['hl_avg14_apr']:.0%}",
+                      f"After fees ~{r['net_apr']:.0%} APR",
+                      "Needs accounts on both exchanges; rebalance margin if price moves >20%"],
+                     {"tradingview": tradingview_link(coin)}, {"net_apr": float(r["net_apr"])})
+    return Trade("2. STABLECOIN", "USDC", "HOLD (no price-neutral trade clears fees)", "Your exchange or wallet",
+                 float("nan"), float("nan"), float("nan"), 0.0, 0.0, 0.0, 7, "n/a",
+                 [f"Best spot-perp carry after fees: {carry.iloc[0]['net_apr']:.0%} APR ({carry.index[0]})"
+                  if len(carry) else "No carry candidates",
+                  f"Hyperliquid HLP vault: {hlp:.1%} APR (market-making vault; can lose money in crashes)"
+                  if hlp == hlp else "HLP vault APR unavailable",
+                  "Plain USDC lending on a major exchange or Aave is the low-risk default"], {}, {})

@@ -63,6 +63,8 @@ class ModelReport:
             "oos_ic_hit_rate": float((ic > 0).mean()) if len(ic) else float("nan"),
             "oos_ls_sharpe": float(ls.mean() / ls.std() * ann) if len(ls) > 2 and ls.std() > 0 else float("nan"),
             "oos_ls_weekly_mean": float(ls.mean()) if len(ls) else float("nan"),
+            "recent_ls_sharpe": (float(ls.tail(26).mean() / ls.tail(26).std() * ann)
+                                 if len(ls) > 10 and ls.tail(26).std() > 0 else float("nan")),
         }
 
     @property
@@ -72,8 +74,19 @@ class ModelReport:
                 and s["oos_ls_sharpe"] > 0.0)
 
 
+# Fixed-weight model adopted 2026-10-22 after the v2 research (research.py): one defensive
+# factor (three correlated signals sharing a third of the weight each) plus Asia-session flow.
+# Fixed weights are not fitted to the data, which limits overfitting.
+FIXED_V2 = {"low_vol": 1 / 6, "low_beta": 1 / 6, "max_effect": 1 / 6, "asia_minus_us": 1 / 2}
+
+
 def build_model(signals: dict[str, pd.DataFrame], close: pd.DataFrame,
-                horizon: int = HORIZON) -> ModelReport:
+                horizon: int = HORIZON, fixed: dict[str, float] | None = None) -> ModelReport:
+    if fixed:
+        fixed = {k: w for k, w in fixed.items() if k in signals}  # e.g. no 4h bars in demo data
+        tot = sum(abs(w) for w in fixed.values()) or 1.0
+        fixed = {k: w / tot for k, w in fixed.items()}
+        signals = {k: v for k, v in signals.items() if k in fixed}
     fwd = forward_returns(close, horizon)
     z = {k: zscore_xs(v) for k, v in signals.items()}
     idx = close.index
@@ -87,7 +100,7 @@ def build_model(signals: dict[str, pd.DataFrame], close: pd.DataFrame,
     oos_ic, oos_ls = {}, {}
     for d in scored:
         known = {k: (s[s.index <= d - pd.Timedelta(days=horizon)] if len(s) else s) for k, s in ics.items()}
-        w = weights_from_ics(known)["weight"]
+        w = pd.Series(fixed) if fixed else weights_from_ics(known)["weight"]
         if w.abs().sum() == 0:
             continue
         comp = sum(z[k].loc[d].fillna(0) * w[k] for k in w.index)
@@ -102,6 +115,8 @@ def build_model(signals: dict[str, pd.DataFrame], close: pd.DataFrame,
         oos_ls[d] = rr[order[-q:]].mean() - rr[order[:q]].mean()
 
     final_w = weights_from_ics(ics)
+    if fixed:
+        final_w["weight"] = pd.Series(fixed)
     last = idx[-1]
     comp_today = sum(z[k].loc[last].fillna(0) * final_w.loc[k, "weight"] for k in final_w.index)
     comp_today = comp_today[close.loc[last].notna()].sort_values(ascending=False)

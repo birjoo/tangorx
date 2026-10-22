@@ -53,7 +53,8 @@ def render(asof: pd.Timestamp, trades: list[Trade], model, reg: dict, cfg, pegs:
               f"| Entry | {_px(t.entry)} |",
               f"| Stop | {_px(t.stop)} |",
               f"| Target | {_px(t.target)} |",
-              f"| Size | {t.size_units:,.4g} units (${t.notional_usd:,.0f} notional) |",
+              (f"| Size | {t.size_units:,.4g} units (${t.notional_usd:,.0f} notional) |" if t.size_units
+               else f"| Size | ${t.notional_usd:,.0f} per leg |"),
               f"| Max loss at stop | {'n/a (hedged; risk = funding flip / venue)' if math.isnan(t.stop) else f'${t.risk_usd:,.0f}'} |",
               f"| Horizon | {t.horizon_days} days (exit at market if neither stop nor target hit) |",
               f"| Conviction | {t.conviction} |", ""]

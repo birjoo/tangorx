@@ -21,8 +21,28 @@ from quant.backtest import build_model
 from quant.news import coin_news
 from quant.report import append_journal, render
 from quant.signals import atr, compute_signals
-from quant.strategy import (Config, carry_candidates, pick_core_spot, pick_futures, pick_speculative,
-                            regime, score_dex)
+from quant.backtest import FIXED_V2
+from quant.signals import zscore_xs
+from quant.stablecoin import cross_venue, hlp_apr, spot_perp_carry
+from quant.strategy import (Config, carry_candidates, pick_spec_futures, pick_spot_trades, pick_stablecoin,
+                            regime)
+
+
+def stable_boards(carry: pd.DataFrame, xv: pd.DataFrame, hlp: float) -> str:
+    L = ["", "## Stablecoin boards (forecast = 14-day average, net of fees)", ""]
+    if len(carry):
+        L += ["**Spot-perp carry**", "", "| Coin | Today | 14d avg | Positive days | Net APR |", "|---|---|---|---|---|"]
+        L += [f"| {c} | {r.today_apr:+.0%} | {r.avg14_apr:+.0%} | {r.positive_days:.0%} | {r.net_apr:+.0%} |"
+              for c, r in carry.head(6).iterrows()] + [""]
+    if len(xv):
+        L += ["**Cross-exchange funding gaps**", "", "| Coin | Hyperliquid | Other | Gap | HL 14d avg | Persistent | Net APR |",
+              "|---|---|---|---|---|---|---|"]
+        L += [f"| {c} | {r.hl_apr:+.0%} | {r.other_venue} {r.other_apr:+.0%} | {r.gap_apr:+.0%} | "
+              f"{r.hl_avg14_apr:+.0%} | {'yes' if r.persistent else 'no'} | {r.net_apr:+.0%} |"
+              for c, r in xv.head(6).iterrows()] + [""]
+    if hlp == hlp:
+        L += [f"HLP vault (USDC): {hlp:.1%} APR", ""]
+    return "\n".join(L)
 
 ROOT = Path(__file__).parent
 REPORTS = ROOT / "reports"
@@ -33,9 +53,9 @@ def gather_live(cfg: Config, n_coins: int, days: int):
     universe = data.perp_universe()
     coins = universe.sort_values("volume_24h_usd", ascending=False).head(n_coins).index.tolist()
     print(f"· candles + funding for {len(coins)} perps ({days}d) ...", file=sys.stderr)
-    panel = data.load_panel(coins, days)
-    print("· DexScreener, TradingView, news, Fear&Greed ...", file=sys.stderr)
-    return (panel, universe, data.dex_candidates(), data.tradingview_ratings(coins), data.headlines(),
+    panel = data.load_panel(coins, days, cache_dir=str(ROOT / ".cache"))
+    print("· TradingView, news, Fear&Greed, stablecoin pegs ...", file=sys.stderr)
+    return (panel, universe, pd.DataFrame(), data.tradingview_ratings(coins), data.headlines(),
             data.fear_greed(), data.stablecoin_pegs())
 
 
@@ -52,28 +72,28 @@ def run(args) -> Path:
     cfg = Config(equity=args.equity)
     panel, universe, dex, tv, heads, fng, pegs = gather_demo() if args.demo else gather_live(cfg, args.coins, args.days)
 
-    model = build_model(compute_signals(panel), panel["close"])
+    sig = compute_signals(panel)
+    model = build_model(sig, panel["close"], fixed=FIXED_V2)
     atr_df = atr(panel)
     reg = regime(panel["close"], fng)
     news_ctx = coin_news(panel["close"].columns.tolist(), heads)
     universe = universe.loc[universe.index.isin(panel["close"].columns)]
+    session_z = (zscore_xs(sig["asia_minus_us"]).iloc[-1] if "asia_minus_us" in sig else pd.Series(dtype=float))
 
-    trades = []
-    core = pick_core_spot(cfg, model, universe, panel, atr_df, reg, news_ctx, tv)
-    if core:
-        trades.append(core)
-    fut = pick_futures(cfg, model, universe, panel, atr_df, reg, news_ctx, tv,
-                       exclude={core.symbol} if core else set())
-    if fut:
-        trades.append(fut)
-    spec = pick_speculative(cfg, score_dex(cfg, dex), reg)
-    if spec:
-        trades.append(spec)
+    spots = pick_spot_trades(cfg, model, universe, atr_df, reg, news_ctx, tv, n=2)
+    carry = spot_perp_carry(universe, panel["funding"], cfg.min_futures_volume)
+    xv = pd.DataFrame() if args.demo else cross_venue(universe, panel["funding"], cfg.min_futures_volume)
+    hlp = float("nan") if args.demo else hlp_apr()
+    stable = pick_stablecoin(cfg, reg, carry, xv, hlp)
+    spec = pick_spec_futures(cfg, model, universe, atr_df, reg, news_ctx, tv, session_z,
+                             exclude={t.symbol for t in spots} | {stable.symbol})
+    trades = spots + [stable] + ([spec] if spec else [])
 
     asof = panel["close"].index[-1]
     REPORTS.mkdir(exist_ok=True)
     stem = f"{asof:%G-W%V}" + ("-demo" if args.demo else "")
     md = render(asof, trades, model, reg, cfg, pegs, carry_candidates(cfg, universe), heads, demo=args.demo)
+    md += stable_boards(carry, xv, hlp)
     out = REPORTS / f"{stem}.md"
     out.write_text(md)
     (REPORTS / f"{stem}.json").write_text(json.dumps(

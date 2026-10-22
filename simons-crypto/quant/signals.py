@@ -84,9 +84,9 @@ def compute_signals_v2(panel: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame
         # Negative skew of 4h returns over 14 days, sampled at day end
         sig["skew_4h"] = -r4.rolling(84, min_periods=42).skew().groupby(day).last().reindex(close.index)
         # Returns made in Asia hours (00-08 UTC) minus US hours (12-20 UTC), last 14 days
-        hrs = r4.index.hour
-        asia = r4.where((hrs >= 0) & (hrs < 8), 0.0).groupby(day).sum()
-        us = r4.where((hrs >= 12) & (hrs < 20), 0.0).groupby(day).sum()
+        hrs = pd.Series(r4.index.hour, index=r4.index)
+        asia = r4.mul(((hrs >= 0) & (hrs < 8)).astype(float), axis=0).groupby(day).sum()
+        us = r4.mul(((hrs >= 12) & (hrs < 20)).astype(float), axis=0).groupby(day).sum()
         sig["asia_minus_us"] = (asia - us).rolling(14, min_periods=7).sum().reindex(close.index)
     return sig
 

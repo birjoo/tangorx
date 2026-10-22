@@ -142,15 +142,49 @@ def evaluate(_args) -> None:
           f"avg return {df['return'].mean():+.2%} | total PnL ${df['pnl_usd'].sum():,.0f}")
 
 
+def status(_args) -> None:
+    """Open trades (last 8 days): live price, stop/target hits so far, unrealised P&L."""
+    path = REPORTS / "journal.csv"
+    if not path.exists():
+        sys.exit("No journal yet.")
+    j = pd.read_csv(path, parse_dates=["date"])
+    j = j[(pd.Timestamp.now() - j["date"]).dt.days <= 8].dropna(subset=["stop"])
+    marks = data.perp_universe()["mark"]
+    rows = []
+    for _, t in j.iterrows():
+        coin, long = str(t["symbol"]), t["side"] == "LONG"
+        bars = data.daily_candles(coin, 12)
+        bars = bars[bars.index.tz_convert(None) > t["date"]]
+        sgn = 1 if long else -1
+        state = "open"
+        for _, b in bars.iterrows():
+            if (b["low"] <= t["stop"]) if long else (b["high"] >= t["stop"]):
+                state = "STOPPED"
+                break
+            if (b["high"] >= t["target"]) if long else (b["low"] <= t["target"]):
+                state = "TARGET HIT"
+                break
+        px = float(marks.get(coin, float("nan")))
+        exit_px = t["stop"] if state == "STOPPED" else t["target"] if state == "TARGET HIT" else px
+        r = (exit_px / t["entry"] - 1) * sgn
+        rows.append({"opened": t["date"].date(), "trade": t["bucket"][:24], "coin": coin, "side": t["side"],
+                     "entry": t["entry"], "now": px, "state": state, "return": f"{r:+.1%}",
+                     "pnl_usd": round(r * t["notional_usd"], 2),
+                     "days_left": max(0, 7 - (pd.Timestamp.now() - t["date"]).days)})
+    df = pd.DataFrame(rows)
+    print(df.to_string(index=False))
+    print(f"\nOpen/closed P&L: ${df['pnl_usd'].sum():,.2f}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("command", nargs="?", default="run", choices=["run", "evaluate"])
+    p.add_argument("command", nargs="?", default="run", choices=["run", "evaluate", "status"])
     p.add_argument("--demo", action="store_true", help="offline synthetic data")
     p.add_argument("--equity", type=float, default=10_000)
     p.add_argument("--coins", type=int, default=60, help="perps in the model universe (by volume)")
     p.add_argument("--days", type=int, default=400, help="history length for validation")
     args = p.parse_args()
-    evaluate(args) if args.command == "evaluate" else run(args)
+    {"evaluate": evaluate, "status": status}.get(args.command, run)(args)
 
 
 if __name__ == "__main__":

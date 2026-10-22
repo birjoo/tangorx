@@ -144,7 +144,9 @@ def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_d
             continue
         closes[coin], highs[coin], lows[coin], vols[coin] = c["close"], c["high"], c["low"], c["volume"] * c["close"]
         try:
-            c4h[coin] = daily_candles(coin, days, "4h")["close"]
+            bars = daily_candles(coin, days, "4h")
+            if not bars.empty:
+                c4h[coin] = bars["close"]
         except requests.RequestException:
             pass
         if with_funding:

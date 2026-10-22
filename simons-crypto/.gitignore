@@ -5,3 +5,4 @@ run.log
 live.md
 reports/*.json
 .cache/
+fetch.log

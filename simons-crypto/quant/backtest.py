@@ -119,5 +119,5 @@ def build_model(signals: dict[str, pd.DataFrame], close: pd.DataFrame,
         final_w["weight"] = pd.Series(fixed)
     last = idx[-1]
     comp_today = sum(z[k].loc[last].fillna(0) * final_w.loc[k, "weight"] for k in final_w.index)
-    comp_today = comp_today[close.loc[last].notna()].sort_values(ascending=False)
+    comp_today = comp_today[close.loc[last].notna()].dropna().sort_values(ascending=False)
     return ModelReport(final_w, pd.Series(oos_ic, dtype=float), pd.Series(oos_ls, dtype=float), comp_today)

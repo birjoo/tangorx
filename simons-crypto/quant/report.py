@@ -64,7 +64,7 @@ def render(asof: pd.Timestamp, trades: list[Trade], model, reg: dict, cfg, pegs:
         L += [f"_Only {len(trades)} trade(s) passed filters. Unused risk stays in stablecoins — "
               "not trading is a position._", ""]
 
-    L += ["## Signal weights (learned from data, not opinion)", "",
+    L += ["## Signal weights (fixed from research, or learned from data)", "",
           "| Signal | Weeks | Mean IC | t-stat | Weight |", "|---|---|---|---|---|"]
     for name, r in model.weights.sort_values("weight", key=abs, ascending=False).iterrows():
         L.append(f"| {name} | {int(r['n_weeks'])} | {r['mean_ic']:+.3f} | {r['t_stat']:+.2f} | {r['weight']:+.2f} |")

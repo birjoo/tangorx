@@ -294,18 +294,22 @@ def pick_stablecoin(cfg, reg, carry: pd.DataFrame, xvenue: pd.DataFrame, hlp: fl
         return Trade("2. STABLECOIN CARRY", coin, "LONG SPOT + SHORT PERP (1x, delta-neutral)",
                      "Spot on any CEX + short perp on Hyperliquid, USDC collateral", float("nan"), float("nan"),
                      float("nan"), 0.0, notional, 0.0, 7, "MEDIUM",
-                     [f"14-day average funding {r['avg14_apr']:.0%} APR (today {r['today_apr']:.0%}), "
+                     [f"14-day median funding {r['avg14_apr']:.0%} APR (today {r['today_apr']:.0%}), "
                       f"positive {r['positive_days']:.0%} of days",
                       f"After fees ~{r['net_apr']:.0%} APR, ~${r['net_apr'] / 52 * notional:,.0f}/week per ${notional:,.0f} leg",
                       "Exit if funding drops under 10% APR; keep >=50% margin on the short"],
                      {"tradingview": tradingview_link(coin)}, {"net_apr": float(r["net_apr"])})
-    ok = xvenue[(xvenue["persistent"]) & (xvenue["net_apr"] >= cfg.carry_min_net_apr)] if len(xvenue) else xvenue
+    # Cross-exchange gaps are shown on the board but never traded: only Hyperliquid has funding
+    # history here, so the other venue's rate (often a post-shock spike) can't be forecast.
+    ok = xvenue.iloc[0:0] if len(xvenue) else xvenue
     if len(ok):
         coin, r = ok.index[0], ok.iloc[0]
         hi, lo = ("Hyperliquid", r["other_venue"]) if r["gap_apr"] > 0 else (r["other_venue"], "Hyperliquid")
         return Trade("2. STABLECOIN CROSS-EXCHANGE FUNDING", coin, f"SHORT PERP on {hi} + LONG PERP on {lo}",
                      "Two perp exchanges, USDC/USDT collateral on both", float("nan"), float("nan"), float("nan"),
-                     0.0, notional, 0.0, 7, "LOW-MEDIUM (other venue has no funding history here)",
+                     0.0, notional, 0.0, 7,
+                     "PAPER ONLY (exchange risk during a market shock)" if reg.get("shock")
+                     else "LOW-MEDIUM (other venue has no funding history here)",
                      [f"Funding gap {abs(r['gap_apr']):.0%} APR (Hyperliquid {r['hl_apr']:.0%}, "
                       f"{r['other_venue']} {r['other_apr']:.0%}); Hyperliquid 14-day avg {r['hl_avg14_apr']:.0%}",
                       f"After fees ~{r['net_apr']:.0%} APR",

@@ -30,13 +30,13 @@ from quant.strategy import (Config, carry_candidates, pick_spec_futures, pick_sp
 
 
 def stable_boards(carry: pd.DataFrame, xv: pd.DataFrame, hlp: float) -> str:
-    L = ["", "## Stablecoin boards (forecast = 14-day average, net of fees)", ""]
+    L = ["", "## Stablecoin boards (forecast = 14-day median, net of fees)", ""]
     if len(carry):
-        L += ["**Spot-perp carry**", "", "| Coin | Today | 14d avg | Positive days | Net APR |", "|---|---|---|---|---|"]
+        L += ["**Spot-perp carry**", "", "| Coin | Today | 14d median | Positive days | Net APR |", "|---|---|---|---|---|"]
         L += [f"| {c} | {r.today_apr:+.0%} | {r.avg14_apr:+.0%} | {r.positive_days:.0%} | {r.net_apr:+.0%} |"
               for c, r in carry.head(6).iterrows()] + [""]
     if len(xv):
-        L += ["**Cross-exchange funding gaps**", "", "| Coin | Hyperliquid | Other | Gap | HL 14d avg | Persistent | Net APR |",
+        L += ["**Cross-exchange funding gaps** (information only: the other exchange's rate has no history here)", "", "| Coin | Hyperliquid | Other | Gap | HL 14d median | Persistent | Net APR |",
               "|---|---|---|---|---|---|---|"]
         L += [f"| {c} | {r.hl_apr:+.0%} | {r.other_venue} {r.other_apr:+.0%} | {r.gap_apr:+.0%} | "
               f"{r.hl_avg14_apr:+.0%} | {'yes' if r.persistent else 'no'} | {r.net_apr:+.0%} |"

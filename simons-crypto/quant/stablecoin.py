@@ -22,7 +22,7 @@ def spot_perp_carry(universe: pd.DataFrame, funding_hist: pd.DataFrame, min_volu
         h = funding_hist[coin].dropna().tail(14) if coin in funding_hist else pd.Series(dtype=float)
         if len(h) < 10:
             continue
-        avg = float(h.mean() * 24 * 365)
+        avg = float(h.median() * 24 * 365)  # median: one spike day can't inflate the forecast
         rows.append({"coin": coin, "today_apr": u["funding_1h"] * 24 * 365, "avg14_apr": avg,
                      "positive_days": float((h > 0).mean()), "net_apr": avg - CARRY_FEE_APR,
                      "volume_24h_usd": u["volume_24h_usd"]})
@@ -46,12 +46,14 @@ def cross_venue(universe: pd.DataFrame, funding_hist: pd.DataFrame, min_volume: 
         venue = (others - r["HlPerp"]).abs().idxmax()
         gap = r["HlPerp"] - others[venue]
         h = funding_hist[coin].dropna().tail(14) if coin in funding_hist else pd.Series(dtype=float)
-        hl_avg = float(h.mean() * 24 * 365) if len(h) else float("nan")
+        hl_avg = float(h.median() * 24 * 365) if len(h) else float("nan")
         # Hyperliquid's average must sit on the same side of the other venue as today
         persistent = len(h) >= 10 and (hl_avg - others[venue]) * gap > 0
         rows.append({"coin": coin, "hl_apr": r["HlPerp"], "other_venue": venue.replace("Perp", ""),
                      "other_apr": others[venue], "gap_apr": gap, "hl_avg14_apr": hl_avg,
-                     "persistent": persistent, "net_apr": abs(gap) - XVENUE_FEE_APR})
+                     # forecast gap uses Hyperliquid's median, not today's print (spikes revert)
+                     "persistent": persistent,
+                     "net_apr": abs(hl_avg - others[venue]) - XVENUE_FEE_APR if hl_avg == hl_avg else float("nan")})
     out = pd.DataFrame(rows)
     return out.set_index("coin").sort_values("net_apr", ascending=False) if len(out) else out
 

@@ -129,10 +129,13 @@ def load_panel(coins: list[str], days: int, with_funding: bool = True, funding_d
         import hashlib
         import pickle
         from pathlib import Path
-        key = hashlib.md5(f"{sorted(coins)}|{days}|{funding_days}|{datetime.now(timezone.utc):%Y-%m-%d}".encode()).hexdigest()[:12]
+        # Keyed by day, not coin list: the top-N by volume shifts during the day
+        key = hashlib.md5(f"{days}|{funding_days}|{datetime.now(timezone.utc):%Y-%m-%d}".encode()).hexdigest()[:12]
         path = Path(cache_dir) / f"panel-{key}.pkl"
         if path.exists():
-            return pickle.loads(path.read_bytes())
+            cached = pickle.loads(path.read_bytes())
+            if len(set(coins) & set(cached["close"].columns)) >= 0.9 * len(coins):
+                return cached
         panel = load_panel(coins, days, with_funding, funding_days)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(pickle.dumps(panel))

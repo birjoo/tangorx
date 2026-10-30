@@ -24,6 +24,7 @@ from quant.signals import atr, compute_signals
 from quant.backtest import FIXED_V2
 from quant.signals import zscore_xs
 from quant.stablecoin import cross_venue, hlp_apr, spot_perp_carry
+from quant import strategy
 from quant.strategy import (Config, carry_candidates, pick_spec_futures, pick_spot_trades, pick_stablecoin,
                             regime)
 
@@ -76,6 +77,7 @@ def run(args) -> Path:
     model = build_model(sig, panel["close"], fixed=FIXED_V2)
     atr_df = atr(panel)
     reg = regime(panel["close"], fng)
+    strategy.SHOCK[0] = reg["shock"]
     news_ctx = coin_news(panel["close"].columns.tolist(), heads)
     universe = universe.loc[universe.index.isin(panel["close"].columns)]
     session_z = (zscore_xs(sig["asia_minus_us"]).iloc[-1] if "asia_minus_us" in sig else pd.Series(dtype=float))

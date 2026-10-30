@@ -32,6 +32,8 @@ def render(asof: pd.Timestamp, trades: list[Trade], model, reg: dict, cfg, pegs:
           f"- BTC 30d realised vol (ann.): {reg['btc_vol_ann']:.0%}" if reg['btc_vol_ann'] == reg['btc_vol_ann'] else "- BTC vol: n/a",
           f"- Fear & Greed: {reg['fear_greed']:.0f}" if reg['fear_greed'] == reg['fear_greed'] else "- Fear & Greed: n/a",
           f"- Risk multiplier applied to all sizes: **{reg['risk_multiplier']:.2f}x**",
+          (f"- ⚠️ **MARKET SHOCK**: BTC moved {reg['shock_sigma']:.1f}x its normal daily range this week. "
+           "Directional trades are PAPER ONLY for 7 days." if reg.get("shock") else "- No market shock detected"),
           f"- Model-strength multiplier on directional trades: **{edge_multiplier(model):.2f}x** "
           "(scales with out-of-sample Sharpe, full size only at 1.0+)", "",
           "## Model health (walk-forward, out-of-sample)", "",

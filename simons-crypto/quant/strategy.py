@@ -70,7 +70,14 @@ def regime(close: pd.DataFrame, fng: pd.Series) -> dict:
     mult = 1.0 if up else 0.5
     if fg == fg and fg >= 80:
         mult *= 0.75  # euphoria: shrink gross
-    return {"btc_above_50d": up, "btc_vol_ann": vol, "fear_greed": fg, "risk_multiplier": mult}
+    # Shock rule (pre-set, not fitted): a BTC day beyond 3x its normal daily move in the last 7 days
+    # means the statistical relationships the model relies on are suspended -> directional = paper only.
+    r = np.log(btc).diff() if len(btc) > 40 else pd.Series(dtype=float)
+    sd = float(r.iloc[-37:-7].std()) if len(r) else float("nan")
+    worst = float(r.tail(7).abs().max()) if len(r) else float("nan")
+    shock = bool(sd == sd and worst > 3 * sd)
+    return {"btc_above_50d": up, "btc_vol_ann": vol, "fear_greed": fg, "risk_multiplier": mult,
+            "shock": shock, "shock_sigma": worst / sd if sd == sd and sd > 0 else float("nan")}
 
 
 def _size(cfg: Config, risk_frac: float, entry: float, stop: float, mult: float, cap_notional: float):
@@ -82,6 +89,7 @@ def _size(cfg: Config, risk_frac: float, entry: float, stop: float, mult: float,
     return units, units * entry, units * per_unit
 
 
+SHOCK = [False]  # set by run_weekly from regime(); read by _directional
 NEW_MODEL_CAP = 0.5  # v2 model adopted 2026-10-22: half size until it has 8 live weeks
 
 
@@ -93,7 +101,9 @@ def edge_multiplier(model) -> float:
     return float(min(NEW_MODEL_CAP, max(0.25, sh)))
 
 
-def _conviction(score: float, trustworthy: bool) -> str:
+def _conviction(score: float, trustworthy: bool, shock: bool = False) -> str:
+    if shock:
+        return "PAPER ONLY (market shock: model paused 7 days)"
     if not trustworthy:
         return "LOW (model not validated out-of-sample)"
     return "HIGH" if abs(score) >= 1.0 else "MEDIUM" if abs(score) >= 0.5 else "LOW"
@@ -116,7 +126,7 @@ def _directional(cfg, coin, side, score, model, atr_now, mark, mult, bucket, ven
     if coin in news_ctx.index:
         why.append(f"{int(news_ctx.loc[coin, 'mentions'])} headlines this week (context only)")
     return Trade(bucket, coin, side, venue, entry, stop, target, units, notional, risk, 7,
-                 _conviction(score, model.trustworthy), why, {"tradingview": tradingview_link(coin)},
+                 _conviction(score, model.trustworthy, SHOCK[0]), why, {"tradingview": tradingview_link(coin)},
                  {"atr": a})
 
 

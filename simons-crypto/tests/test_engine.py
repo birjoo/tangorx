@@ -132,3 +132,13 @@ def test_fixed_model_drops_missing_signals():
     m = build_model(compute_signals(panel), panel["close"], fixed=FIXED_V2)
     assert "asia_minus_us" not in m.weights.index
     assert abs(m.weights["weight"].abs().sum() - 1) < 1e-9
+
+
+def test_shock_rule():
+    idx = pd.date_range("2026-01-01", periods=120, freq="D", tz="UTC")
+    calm = pd.Series(100 * np.exp(np.cumsum(np.random.default_rng(1).normal(0, 0.01, 120))), index=idx)
+    assert not regime(pd.DataFrame({"BTC": calm}), pd.Series(dtype=float))["shock"]
+    hit = calm.copy()
+    hit.iloc[-2:] *= 0.92  # one -8% day, ~8x normal
+    r = regime(pd.DataFrame({"BTC": hit}), pd.Series(dtype=float))
+    assert r["shock"] and r["shock_sigma"] > 3

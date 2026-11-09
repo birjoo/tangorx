@@ -13,3 +13,6 @@ date,bucket,symbol,side,entry,stop,target,notional_usd,risk_usd
 2026-10-30,1b. SPOT (paid with stablecoins),XMR,LONG,592.34,507.7971428571429,719.1542857142858,43.79,6.25
 2026-10-30,2. STABLECOIN,USDC,HOLD (no price-neutral trade clears fees),nan,nan,nan,0.0,0.0
 2026-10-30,3. SPECULATIVE FUTURES,AAVE,LONG,127.16,108.50285714285715,155.14571428571426,42.6,6.25
+2026-11-09,1a. SPOT (paid with stablecoins),PONS,LONG,0.154876,0.08905028571428572,0.25361457142857147,14.71,6.25
+2026-11-09,1b. SPOT (paid with stablecoins),XMR,LONG,597.9,539.85,684.9749999999999,64.37,6.25
+2026-11-09,2. STABLECOIN,USDC,HOLD (no price-neutral trade clears fees),nan,nan,nan,0.0,0.0

@@ -13,8 +13,11 @@ import pandas as pd
 
 RISK_WORDS = re.compile(
     r"\b(hack(ed)?|exploit(ed)?|drain(ed)?|rug ?pull|delist(s|ed|ing)?|lawsuit|sued|sues|charged|"
-    r"indict(ed|ment)?|bankrupt(cy)?|insolven(t|cy)|halt(s|ed)?|depeg(ged)?|outage|vulnerabilit(y|ies)|"
-    r"stolen|fraud|seized?|attack(ed)?|unlock(s)?)\b", re.I)
+    r"indict(ed|ment)?|bankrupt(cy)?|insolven(t|cy)|depeg(ged)?|outage|vulnerabilit(y|ies)|"
+    r"stolen|fraud|seized?|attack(ed)?|unlock(s)?|"
+    # "halt" only when money or the chain stops, not "event halted"
+    r"halt(s|ed|ing)? (withdrawals?|deposits?|trading|transfers?|swaps?|block production)|"
+    r"(chain|network|mainnet|blockchain) (halt(s|ed)?|outage))\b", re.I)
 
 NAMES = {
     "BTC": "bitcoin", "ETH": "ethereum|ether", "SOL": "solana", "XRP": "xrp|ripple", "BNB": "bnb|binance coin",

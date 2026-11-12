@@ -16,3 +16,4 @@ date,bucket,symbol,side,entry,stop,target,notional_usd,risk_usd
 2026-11-09,1a. SPOT (paid with stablecoins),PONS,LONG,0.154876,0.08905028571428572,0.25361457142857147,14.71,6.25
 2026-11-09,1b. SPOT (paid with stablecoins),XMR,LONG,597.9,539.85,684.9749999999999,64.37,6.25
 2026-11-09,2. STABLECOIN,USDC,HOLD (no price-neutral trade clears fees),nan,nan,nan,0.0,0.0
+2026-11-12,THIS WEEK'S TRADE,USDC,HOLD STABLECOINS,nan,nan,nan,0.0,0.0

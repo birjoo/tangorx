@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Weekly Simons-style crypto picks.
 
-  python run_weekly.py                 # live run, writes reports/YYYY-Www.md
+  python run_weekly.py                 # one safe trade: BTC spot or hold stablecoins
+  python run_weekly.py --full          # old multi-slot report (model picks, carry, futures)
   python run_weekly.py --demo          # offline run on synthetic data
   python run_weekly.py --equity 25000  # size trades for your account
   python run_weekly.py evaluate        # score past picks in reports/journal.csv
@@ -67,6 +68,46 @@ def gather_demo():
                           "published": pd.Timestamp.now(tz="UTC"), "source": "demo"})
     fng = pd.Series([55.0], index=[pd.Timestamp.now(tz="UTC")])
     return panel, universe, make_dex(), pd.Series(dtype=float), heads, fng, pd.DataFrame()
+
+
+def run_single(args) -> Path:
+    """Default: one safe trade per week (BTC spot when trend + no shock, else stablecoins)."""
+    from quant.news import blocked
+    from quant.single import weekly_trade
+    from quant.synthetic import make_market
+    if args.demo:
+        panel, _ = make_market()
+        btc = pd.DataFrame({"close": panel["close"]["BTC"], "high": panel["high"]["BTC"], "low": panel["low"]["BTC"]})
+        mark, risk, fng, hlp = None, [], float("nan"), float("nan")
+    else:
+        btc = data.daily_candles("BTC", 120)
+        mark = float(data.perp_universe().loc["BTC", "mark"])
+        risk = blocked("BTC", coin_news(["BTC"], data.headlines()))
+        f = data.fear_greed()
+        fng = float(f.iloc[-1]) if len(f) else float("nan")
+        hlp = hlp_apr()
+    t, sig = weekly_trade(args.equity, btc, mark, risk)
+    asof = btc.index[-1]
+    L = [f"# This week's trade — {asof:%Y-%m-%d}", ""]
+    if args.demo:
+        L += ["> **DEMO on synthetic data. Do not trade this.**", ""]
+    L += [f"## {t.side}" + (f": {t.symbol}" if t.symbol == "BTC" else ""), ""]
+    if t.symbol == "BTC":
+        L += ["| | |", "|---|---|", f"| Entry | ${t.entry:,.0f} |", f"| Stop | ${t.stop:,.0f} |",
+              f"| Target | ${t.target:,.0f} |", f"| Size | {t.size_units:.5f} BTC (${t.notional_usd:,.0f}) |",
+              f"| Max loss | ${t.risk_usd:,.0f} (1% of ${args.equity:,.0f}) |", "| Hold | up to 7 days |", ""]
+    L += [f"- {r}" for r in t.rationale]
+    L += ["", f"Fear & Greed: {fng:.0f}" if fng == fng else "", f"HLP vault APR: {hlp:.1%}" if hlp == hlp else "",
+          "", "_Rule: buy BTC only above its 50-day average with no shock in 7 days; otherwise hold stablecoins. "
+          "Backtest: +10%, worst week -5.8%, max drawdown -12%. Not financial advice._"]
+    md = "\n".join(L)
+    REPORTS.mkdir(exist_ok=True)
+    out = REPORTS / (f"{asof:%G-W%V}-single" + ("-demo" if args.demo else "") + ".md")
+    out.write_text(md)
+    if not args.demo:
+        append_journal(REPORTS / "journal.csv", asof, [t])
+    print(md)
+    return out
 
 
 def run(args) -> Path:
@@ -182,11 +223,13 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command", nargs="?", default="run", choices=["run", "evaluate", "status"])
     p.add_argument("--demo", action="store_true", help="offline synthetic data")
+    p.add_argument("--full", action="store_true", help="old multi-slot report (model picks, carry, futures)")
     p.add_argument("--equity", type=float, default=10_000)
     p.add_argument("--coins", type=int, default=60, help="perps in the model universe (by volume)")
     p.add_argument("--days", type=int, default=400, help="history length for validation")
     args = p.parse_args()
-    {"evaluate": evaluate, "status": status}.get(args.command, run)(args)
+    default = run if args.full else run_single
+    {"evaluate": evaluate, "status": status}.get(args.command, default)(args)
 
 
 if __name__ == "__main__":

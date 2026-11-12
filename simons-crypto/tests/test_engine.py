@@ -142,3 +142,19 @@ def test_shock_rule():
     hit.iloc[-2:] *= 0.92  # one -8% day, ~8x normal
     r = regime(pd.DataFrame({"BTC": hit}), pd.Series(dtype=float))
     assert r["shock"] and r["shock_sigma"] > 3
+
+
+def test_single_trade_rule():
+    from quant.single import weekly_trade
+    idx = pd.date_range("2026-01-01", periods=120, freq="D", tz="UTC")
+    noise = np.random.default_rng(2).normal(0, 0.01, 120)
+    up = pd.Series(60000 * np.exp(np.cumsum(0.0025 + noise)), index=idx)
+    df = pd.DataFrame({"close": up, "high": up * 1.01, "low": up * 0.99})
+    t, s = weekly_trade(10_000, df)
+    assert t.symbol == "BTC" and t.stop < t.entry < t.target
+    assert t.risk_usd <= 100 + 1e-6 and t.notional_usd <= 5_000 + 1e-6
+    down = df[::-1].set_axis(idx)
+    t2, _ = weekly_trade(10_000, down)
+    assert t2.side == "HOLD STABLECOINS"
+    t3, _ = weekly_trade(10_000, df, risk_headlines=["Bitcoin exchange hacked"])
+    assert t3.side == "HOLD STABLECOINS"

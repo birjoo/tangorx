@@ -34,6 +34,10 @@ The report also includes a funding-carry board, a stablecoin depeg monitor, Trad
 - **RSS** (CoinDesk, Cointelegraph, Decrypt): headline kill switch.
 - **alternative.me**: Fear & Greed regime.
 
+## Current approach (since 2026-11-12): one safe trade a week
+
+Buy BTC spot with stablecoins only when BTC closes above its 50-day average and there was no shock (no day beyond 3x its normal move) in the last 7 days. Stop 2x ATR, target 3x ATR, sell after 7 days. Otherwise hold stablecoins. Backtest over 48 weeks (`research_single.py`): +10%, worst week -5.8%, max drawdown -12%, versus -17% and a -37% drawdown for holding BTC. `python run_weekly.py` prints it; `--full` gives the old multi-slot research report.
+
 ## Simplest: the web page
 
 Open `web/index.html` in any browser (double-click it). Your browser pulls live data from Hyperliquid and DexScreener and shows the 3 trades sized to your account. You don't need to install anything. Press **Refresh** each Monday.
